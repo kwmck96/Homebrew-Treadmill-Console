@@ -1,0 +1,37 @@
+.bar {
+  display: flex;
+  gap: var(--gap);
+  height: 22%;
+  min-height: 5.5em;
+}
+
+.primary,
+.secondary {
+  border-radius: var(--radius-lg);
+  font-size: 1.6em;
+  font-weight: 700;
+}
+
+.primary {
+  flex: 2;
+  background: var(--chalk);
+  color: var(--night);
+}
+
+.primary[data-tone='go'] {
+  background: var(--go);
+  color: #04210f;
+}
+
+.secondary {
+  flex: 1;
+  background: var(--lane-raised);
+  border: 2px solid var(--line);
+}
+
+.secondary[data-tone='danger'] {
+  background: var(--stop);
+  border-color: var(--stop);
+  color: #fff;
+  font-size: 1.25em;
+}

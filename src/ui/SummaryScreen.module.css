@@ -1,0 +1,102 @@
+.screen {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--gap) * 1.5);
+  padding: calc(var(--gap) * 2) calc(var(--gap) * 3);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title {
+  margin: 0;
+  font-size: 2em;
+  font-weight: 650;
+}
+
+.date {
+  margin: 0.2em 0 0;
+  color: var(--mist);
+}
+
+.done {
+  min-height: 3.4em;
+  min-width: 9em;
+  border-radius: var(--radius-lg);
+  background: var(--chalk);
+  color: var(--night);
+  font-size: 1.2em;
+  font-weight: 700;
+}
+
+.totals {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  border-top: 0.3em solid var(--speed);
+  border-bottom: 2px solid var(--line);
+}
+
+.total {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+  padding: 0.9em 0.4em;
+}
+
+.total + .total {
+  border-left: 2px solid var(--line);
+  padding-left: 1em;
+}
+
+.totalLabel {
+  color: var(--mist);
+}
+
+.totalValue {
+  font-size: 2.4em;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.totalUnit {
+  font-size: 0.45em;
+  font-weight: 500;
+  color: var(--mist);
+}
+
+.tableWrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 1.1em;
+}
+
+.table th {
+  position: sticky;
+  top: 0;
+  background: var(--night);
+  color: var(--mist);
+  font-weight: 500;
+  text-align: right;
+  padding: 0.5em 0.8em;
+}
+
+.table td {
+  text-align: right;
+  padding: 0.55em 0.8em;
+  border-top: 2px solid var(--line);
+}
+
+.table th:first-child,
+.table td:first-child {
+  text-align: left;
+}

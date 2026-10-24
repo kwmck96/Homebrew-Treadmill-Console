@@ -1,0 +1,76 @@
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+import type { DistanceUnit, SpeedDisplay } from '../lib/units'
+import type { FieldId } from '../workout/fields'
+
+export interface Preset {
+  id: string
+  label: string
+  value: number
+}
+
+export interface Settings {
+  distanceUnit: DistanceUnit
+  /** Whether the big readout shows pace (min/mi) or speed (mph). */
+  speedDisplay: SpeedDisplay
+  /** Belt speed used by Start and Resume. Always a walking speed (S4). */
+  startSpeedMph: number
+  /** −3 per Precor spec; set to 0 if the decline doesn't exist on this unit. */
+  minInclinePct: number
+  speedPresets: Preset[]
+  inclinePresets: Preset[]
+  /** Which metric shows in each data-field slot, in order. */
+  dataFields: FieldId[]
+}
+
+interface SettingsActions {
+  update: (patch: Partial<Settings>) => void
+  setPresetValue: (kind: 'speed' | 'incline', id: string, value: number) => void
+  setDataField: (slot: number, field: FieldId) => void
+  resetToDefaults: () => void
+}
+
+export const DEFAULT_SETTINGS: Settings = {
+  distanceUnit: 'mi',
+  speedDisplay: 'pace',
+  startSpeedMph: 1.0,
+  minInclinePct: -3,
+  speedPresets: [
+    { id: 'rest', label: 'Rest', value: 3.0 },
+    { id: 'recovery', label: 'Recovery', value: 7.0 },
+    { id: 'run', label: 'Run', value: 11.0 },
+  ],
+  // Placeholder incline presets; edit in the app.
+  inclinePresets: [
+    { id: 'flat', label: 'Flat', value: 0 },
+    { id: 'road', label: 'Road', value: 1 },
+    { id: 'hill', label: 'Hill', value: 4 },
+  ],
+  dataFields: ['elapsed', 'distance', 'lapTime', 'lapDistance', 'avgPace', 'elevGain'],
+}
+
+export const useSettings = create<Settings & SettingsActions>()(
+  persist(
+    (set) => ({
+      ...DEFAULT_SETTINGS,
+      update: (patch) => set(patch),
+      setPresetValue: (kind, id, value) =>
+        set((s) => {
+          const key = kind === 'speed' ? 'speedPresets' : 'inclinePresets'
+          return { [key]: s[key].map((p) => (p.id === id ? { ...p, value } : p)) }
+        }),
+      setDataField: (slot, field) =>
+        set((s) => {
+          const dataFields = [...s.dataFields]
+          dataFields[slot] = field
+          return { dataFields }
+        }),
+      resetToDefaults: () => set(DEFAULT_SETTINGS),
+    }),
+    {
+      name: 'htc-settings',
+      // Bump when the Settings shape changes and add a `migrate` function.
+      version: 1,
+    },
+  ),
+)

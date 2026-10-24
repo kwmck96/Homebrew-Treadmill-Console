@@ -1,0 +1,94 @@
+.note {
+  margin: 0 0 1em;
+  max-width: 60ch;
+  color: var(--mist);
+  line-height: 1.4;
+}
+
+.buttonGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gap);
+}
+
+.action {
+  min-height: 3.6em;
+  padding: 0 1.4em;
+  border-radius: var(--radius-sm);
+  background: var(--lane-raised);
+  font-weight: 600;
+}
+
+.action[data-tone='danger'] {
+  background: var(--stop);
+  color: #fff;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: calc(var(--gap) * 2);
+  padding: 0.9em 0;
+  border-bottom: 2px solid var(--line);
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.rowLabel {
+  font-weight: 600;
+}
+
+.rowHint {
+  max-width: 48ch;
+  margin-top: 0.2em;
+  color: var(--mist);
+  font-size: 0.85em;
+  line-height: 1.35;
+}
+
+.segmented {
+  display: flex;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--night);
+}
+
+.segment {
+  min-height: 2.8em;
+  min-width: 6.5em;
+  padding: 0 1em;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--mist);
+}
+
+.segment[aria-checked='true'] {
+  background: var(--chalk);
+  color: var(--night);
+  font-weight: 700;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+}
+
+.stepperButton {
+  width: 3em;
+  height: 2.8em;
+  border-radius: var(--radius-sm);
+  background: var(--lane-raised);
+  font-size: 1.2em;
+  font-weight: 700;
+}
+
+.stepperValue {
+  min-width: 5.5em;
+  text-align: center;
+  font-size: 1.15em;
+  font-weight: 600;
+}
