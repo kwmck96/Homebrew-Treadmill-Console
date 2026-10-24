@@ -1,0 +1,47 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  background: rgb(6 15 26 / 0.72);
+}
+
+.sheet {
+  width: min(92vw, 60em);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--lane);
+  border: 2px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  padding: var(--gap) calc(var(--gap) * 1.5);
+  border-bottom: 2px solid var(--line);
+}
+
+.title {
+  flex: 1;
+  margin: 0;
+  font-size: 1.3em;
+  font-weight: 600;
+}
+
+.close {
+  min-height: 2.8em;
+  padding: 0 1.4em;
+  border-radius: var(--radius-sm);
+  background: var(--lane-raised);
+  font-weight: 600;
+}
+
+.body {
+  padding: calc(var(--gap) * 1.5);
+  overflow-y: auto;
+}

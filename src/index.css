@@ -1,0 +1,88 @@
+@import '@fontsource-variable/saira/standard.css';
+
+/*
+ * Design tokens.
+ * Night-session indoor track: navy surface, chalk-white numerals, and one
+ * accent per lane — amber for speed, teal for incline — so a glance at a
+ * colour tells you which control you're looking at.
+ */
+:root {
+  --night: #0f2236;
+  --lane: #16304a;
+  --lane-raised: #1d3d5d;
+  --line: #2c4c6e;
+  --chalk: #eef1ec;
+  --mist: #8fa6bd;
+  --speed: #ffb547;
+  --speed-ink: #2b1a00;
+  --grade: #6fd3c8;
+  --grade-ink: #00211e;
+  --stop: #f0484e;
+  --go: #52c97a;
+
+  --font: 'Saira Variable', system-ui, sans-serif;
+
+  /* Sizes scale with the viewport so the layout holds on any landscape screen. */
+  --gap: clamp(8px, 1.2vmin, 16px);
+  --radius-lg: clamp(12px, 1.8vmin, 22px);
+  --radius-sm: clamp(8px, 1vmin, 12px);
+
+  color-scheme: dark;
+  font-family: var(--font);
+  font-size: clamp(14px, 2.2vmin, 22px);
+  color: var(--chalk);
+  background: var(--night);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  /* Sweaty-finger friendly: no text selection, no double-tap zoom, no
+     long-press callouts. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+  overscroll-behavior: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  border: none;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.32;
+}
+
+button:focus-visible {
+  outline: 3px solid var(--chalk);
+  outline-offset: 2px;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+  font-stretch: 78%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
