@@ -1,8 +1,14 @@
 import { useEffect, useState } from 'react'
+import { type ConsoleView, useSettings } from '../settings/store'
 import { getDriver, useConsole } from '../workout/store'
 import { SettingsSheet } from './SettingsSheet'
 import { SimPanel } from './SimPanel'
 import styles from './StatusBar.module.css'
+
+const VIEWS: [ConsoleView, string][] = [
+  ['control', 'Control Center'],
+  ['charts', 'Charts'],
+]
 
 const CONNECTION_TEXT = {
   connected: 'connected',
@@ -14,6 +20,9 @@ export function StatusBar() {
   const treadmill = useConsole((s) => s.treadmill)
   const workoutStatus = useConsole((s) => s.workout?.status ?? null)
   const stopNow = useConsole((s) => s.stopNow)
+  const simTimeScale = useConsole((s) => s.simTimeScale)
+  const view = useSettings((s) => s.view)
+  const setView = (v: ConsoleView) => useSettings.getState().update({ view: v })
   const [panel, setPanel] = useState<'settings' | 'sim' | null>(null)
   const clock = useClock()
   const driver = getDriver()
@@ -29,6 +38,27 @@ export function StatusBar() {
       </span>
 
       <span className={styles.state}>{stateText}</span>
+      {simTimeScale !== 1 && (
+        <span className={styles.warp} title="Simulated time is running faster than real time">
+          {simTimeScale}× time
+        </span>
+      )}
+
+      <div className={styles.views} role="tablist" aria-label="Workout view">
+        {VIEWS.map(([v, label]) => (
+          <button
+            key={v}
+            type="button"
+            role="tab"
+            aria-selected={view === v}
+            className={styles.viewTab}
+            onClick={() => setView(v)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       <span className={`${styles.clock} num`}>{clock}</span>
 
       <div className={styles.actions}>

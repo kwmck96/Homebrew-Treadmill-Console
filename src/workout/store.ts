@@ -4,6 +4,8 @@
  * it with `useConsole(selector)`; the timer loop lives here, not in React.
  */
 import { create } from 'zustand'
+import { SimulatedHeartRate } from '../heartrate/simulator'
+import type { HeartRateSource, HeartRateState } from '../heartrate/types'
 import { useSettings } from '../settings/store'
 import { clampIncline, clampSpeed, TRM885_LIMITS } from '../treadmill/limits'
 import { SimulatedTreadmill } from '../treadmill/simulator'
@@ -16,10 +18,21 @@ import type { PauseReason, WorkoutRecord } from './types'
 const TICK_MS = 250
 /** How often the in-progress workout is written to storage (M9). */
 const SAVE_EVERY_MS = 3000
+/**
+ * Largest slice of simulated time integrated in one step. Keeps the 1 Hz
+ * samples intact when the simulator runs faster than real time.
+ */
+const MAX_SUBSTEP_MS = 1000
+
+/** Simulator-only: how many times faster than real time the simulation runs. */
+export type SimTimeScale = 1 | 10 | 30
 
 interface ConsoleState {
   ready: boolean
   treadmill: TreadmillState
+  heartRate: HeartRateState
+  /** 1 on real hardware. Above 1 only while testing with the simulator. */
+  simTimeScale: SimTimeScale
   workout: WorkoutRecord | null
   /** The finished workout whose summary is on screen (M8). */
   summary: WorkoutRecord | null
@@ -40,15 +53,22 @@ interface ConsoleActions {
   nudgeSpeed: (deltaMph: number) => void
   setIncline: (pct: number) => void
   nudgeIncline: (deltaPct: number) => void
+  setSimTimeScale: (scale: SimTimeScale) => void
 }
 
 // ---- driver selection ----------------------------------------------------
 // The only place that decides which hardware backend to use. When the ESP32
 // bridge exists, its driver gets chosen here (e.g. from a setting).
 const driver: TreadmillDriver = new SimulatedTreadmill()
+// Same for heart rate: a Bluetooth strap source replaces this later (H1).
+const heartRateSource: HeartRateSource = new SimulatedHeartRate()
 
 export function getDriver(): TreadmillDriver {
   return driver
+}
+
+export function getHeartRateSource(): HeartRateSource {
+  return heartRateSource
 }
 
 export function effectiveLimits(): TreadmillLimits {
@@ -106,10 +126,21 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
 
   function tick() {
     const t = performance.now()
-    const dt = t - lastTick
+    const dt = (t - lastTick) * get().simTimeScale
     lastTick = t
-    const { workout, treadmill } = get()
-    if (!workout || workout.status === 'finished') return
+    const { treadmill } = get()
+    // The simulated strap needs to know what the belt is doing.
+    const feedHr = (ms: number) => {
+      if (heartRateSource instanceof SimulatedHeartRate) {
+        heartRateSource.feed(treadmill.actualSpeedMph, treadmill.actualInclinePct, ms)
+      }
+    }
+
+    const { workout } = get()
+    if (!workout || workout.status === 'finished') {
+      feedHr(dt)
+      return
+    }
 
     if (awaitingBeltStart && t - awaitingSince > BELT_START_TIMEOUT_MS) {
       // The belt never started (command lost, hardware refused). Don't let the
@@ -121,16 +152,18 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
       }
     }
 
-    const next = engine.advance(
-      workout,
-      {
+    let next = workout
+    for (let left = dt; left > 0; left -= MAX_SUBSTEP_MS) {
+      const step = Math.min(left, MAX_SUBSTEP_MS)
+      feedHr(step)
+      const reading = {
         actualSpeedMph: treadmill.actualSpeedMph,
         actualInclinePct: treadmill.actualInclinePct,
         connected: treadmill.connection === 'connected',
-      },
-      dt,
-      now(),
-    )
+        heartRateBpm: get().heartRate.bpm,
+      }
+      next = engine.advance(next, reading, step, now())
+    }
     set({ workout: next })
     if (t - lastSave >= SAVE_EVERY_MS) {
       lastSave = t
@@ -150,12 +183,15 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
   return {
     ready: false,
     treadmill: driver.getState(),
+    heartRate: heartRateSource.getState(),
+    simTimeScale: 1,
     workout: null,
     summary: null,
 
     async init() {
       if (get().ready) return
       driver.subscribe(onTreadmill)
+      heartRateSource.subscribe((heartRate) => set({ heartRate }))
 
       // Crash recovery (M9): restore an in-progress workout as paused. The
       // belt is never restarted automatically (S4).
@@ -168,7 +204,7 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
       lastSave = lastTick
       tickTimer ??= setInterval(tick, TICK_MS)
       set({ ready: true })
-      await driver.connect()
+      await Promise.all([driver.connect(), heartRateSource.connect()])
     },
 
     async startWorkout() {
@@ -244,6 +280,12 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
 
     nudgeIncline(delta) {
       get().setIncline(get().treadmill.targetInclinePct + delta)
+    },
+
+    setSimTimeScale(scale) {
+      if (!(driver instanceof SimulatedTreadmill)) return
+      driver.timeScale = scale
+      set({ simTimeScale: scale })
     },
   }
 })

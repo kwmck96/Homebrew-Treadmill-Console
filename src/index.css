@@ -3,8 +3,8 @@
 /*
  * Design tokens.
  * Night-session indoor track: navy surface, chalk-white numerals, and one
- * accent per lane — amber for speed, teal for incline — so a glance at a
- * colour tells you which control you're looking at.
+ * accent per metric — amber for speed, teal for incline, pink for heart rate —
+ * so a glance at a colour tells you which metric you're looking at.
  */
 :root {
   --night: #0f2236;
@@ -17,6 +17,7 @@
   --speed-ink: #2b1a00;
   --grade: #6fd3c8;
   --grade-ink: #00211e;
+  --heart: #ff7aa2;
   --stop: #f0484e;
   --go: #52c97a;
 

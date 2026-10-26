@@ -86,7 +86,7 @@ describe('workout engine', () => {
 describe('fields', () => {
   it('formats pace and distance in both units', () => {
     const r = runFor(createWorkout(0), 600, 6)
-    const ctx = { record: r, actualSpeedMph: 6, actualInclinePct: 0 }
+    const ctx = { record: r, actualSpeedMph: 6, actualInclinePct: 0, heartRateBpm: null }
     expect(FIELDS_BY_ID.currentPace.compute({ ...ctx, unit: 'mi' }).value).toBe('10:00')
     expect(FIELDS_BY_ID.distance.compute({ ...ctx, unit: 'mi' }).value).toBe('1.00')
     expect(FIELDS_BY_ID.distance.compute({ ...ctx, unit: 'km' }).value).toBe('1.61')
@@ -95,7 +95,13 @@ describe('fields', () => {
   })
 
   it('shows placeholders when stopped', () => {
-    const ctx = { record: null, actualSpeedMph: 0, actualInclinePct: 0, unit: 'mi' as const }
+    const ctx = {
+      record: null,
+      actualSpeedMph: 0,
+      actualInclinePct: 0,
+      heartRateBpm: null,
+      unit: 'mi' as const,
+    }
     expect(FIELDS_BY_ID.currentPace.compute(ctx).value).toBe('--:--')
     expect(FIELDS_BY_ID.elapsed.compute(ctx).value).toBe('0:00')
   })

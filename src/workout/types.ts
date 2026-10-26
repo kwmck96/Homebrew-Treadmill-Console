@@ -31,6 +31,8 @@ export interface Sample {
   speedMph: number
   inclinePct: number
   distanceM: number
+  /** Heart rate in bpm, when a strap was connected. */
+  hr?: number
 }
 
 /**

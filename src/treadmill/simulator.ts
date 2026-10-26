@@ -49,6 +49,8 @@ export class SimulatedTreadmill implements TreadmillDriver {
   readonly name = 'Simulator'
   readonly isSimulated = true
   limits: TreadmillLimits
+  /** Run the physics faster than real time (testing aid). */
+  timeScale = 1
 
   private rates: SimulatorRates
   private listeners = new Set<TreadmillListener>()
@@ -214,7 +216,7 @@ export class SimulatedTreadmill implements TreadmillDriver {
     if (!this.autoTick || this.timer) return
     this.timer = setInterval(() => {
       const t = this.now()
-      const dt = t - this.lastTick
+      const dt = (t - this.lastTick) * this.timeScale
       this.lastTick = t
       this.advance(dt)
     }, this.tickMs)
