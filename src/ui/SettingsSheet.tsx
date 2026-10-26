@@ -1,5 +1,12 @@
 import type { ReactNode } from 'react'
 import { quantize } from '../treadmill/limits'
+import {
+  AUTO_LAP_LIMITS,
+  AUTO_LAP_PICKS,
+  convertAutoLap,
+  formatAutoLap,
+  stepAutoLap,
+} from '../settings/autoLap'
 import { useSettings } from '../settings/store'
 import { useConsole } from '../workout/store'
 import { HoldButton } from './HoldButton'
@@ -107,26 +114,49 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
 
       <Row
         label="Auto-lap distance"
-        hint={s.autoLap ? 'In your distance unit, so 1 mi becomes 1 km if you switch to kilometers.' : 'Auto-lap is off.'}
+        hint={
+          s.autoLap
+            ? 'Has its own unit, so you can run in miles and still split every 400 m. Changing distance units carries the number across: 1 mi becomes 1000 m.'
+            : 'Auto-lap is off.'
+        }
       >
         <div className={styles.autoLapDistance}>
+          <Segmented
+            value={s.autoLapUnit}
+            options={[
+              ['mi', 'Miles'],
+              ['m', 'Meters'],
+            ]}
+            onChange={(unit) =>
+              s.update({
+                autoLapUnit: unit,
+                autoLapDistance: convertAutoLap(s.autoLapDistance, s.autoLapUnit, unit),
+              })
+            }
+            disabled={!s.autoLap}
+            label="Auto-lap unit"
+          />
           <div className={styles.stepper}>
             <HoldButton
               className={styles.stepperButton}
               aria-label="Shorter auto-lap distance"
-              disabled={!s.autoLap || s.autoLapDistance <= AUTO_LAP_MIN}
-              onTrigger={() => s.update({ autoLapDistance: stepAutoLap(s.autoLapDistance, -1) })}
+              disabled={!s.autoLap || s.autoLapDistance <= AUTO_LAP_LIMITS[s.autoLapUnit].min}
+              onTrigger={() =>
+                s.update({ autoLapDistance: stepAutoLap(s.autoLapDistance, s.autoLapUnit, -1) })
+              }
             >
               −
             </HoldButton>
             <span className={`${styles.stepperValue} num`}>
-              {s.autoLapDistance.toFixed(2)} {s.distanceUnit}
+              {formatAutoLap(s.autoLapDistance, s.autoLapUnit)}
             </span>
             <HoldButton
               className={styles.stepperButton}
               aria-label="Longer auto-lap distance"
-              disabled={!s.autoLap || s.autoLapDistance >= AUTO_LAP_MAX}
-              onTrigger={() => s.update({ autoLapDistance: stepAutoLap(s.autoLapDistance, 1) })}
+              disabled={!s.autoLap || s.autoLapDistance >= AUTO_LAP_LIMITS[s.autoLapUnit].max}
+              onTrigger={() =>
+                s.update({ autoLapDistance: stepAutoLap(s.autoLapDistance, s.autoLapUnit, 1) })
+              }
             >
               +
             </HoldButton>
@@ -134,10 +164,11 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
           {s.autoLap && (
             <Segmented
               value={String(s.autoLapDistance)}
-              options={(s.distanceUnit === 'mi' ? [0.25, 0.5, 1] : [0.4, 0.5, 1]).map(
-                (d) => [String(d), `${d} ${s.distanceUnit}`] as [string, string],
+              options={AUTO_LAP_PICKS[s.autoLapUnit].map(
+                (d) => [String(d), `${d} ${s.autoLapUnit}`] as [string, string],
               )}
               onChange={(v) => s.update({ autoLapDistance: Number(v) })}
+              label="Auto-lap quick picks"
             />
           )}
         </div>
@@ -157,15 +188,6 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
   )
 }
 
-const AUTO_LAP_MIN = 0.05
-const AUTO_LAP_MAX = 10
-
-/** ±0.05 in the display unit, kept on the 0.05 grid. */
-function stepAutoLap(value: number, dir: 1 | -1): number {
-  const next = Math.round((value + dir * 0.05) * 20) / 20
-  return Math.min(AUTO_LAP_MAX, Math.max(AUTO_LAP_MIN, next))
-}
-
 function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
     <div className={styles.row}>
@@ -182,23 +204,28 @@ function Segmented<T extends string>({
   value,
   options,
   onChange,
+  disabled,
+  label,
 }: {
   value: T
   options: [T, string][]
   onChange: (v: T) => void
+  disabled?: boolean
+  label?: string
 }) {
   return (
-    <div className={styles.segmented} role="radiogroup">
-      {options.map(([v, label]) => (
+    <div className={styles.segmented} role="radiogroup" aria-label={label}>
+      {options.map(([v, text]) => (
         <button
           key={v}
           type="button"
           role="radio"
           aria-checked={value === v}
           className={styles.segment}
+          disabled={disabled}
           onClick={() => onChange(v)}
         >
-          {label}
+          {text}
         </button>
       ))}
     </div>

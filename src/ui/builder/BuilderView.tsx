@@ -6,6 +6,7 @@ import { expandPlan } from '../../plan/expand'
 import { describeBlock, formatElevation } from '../../plan/format'
 import { useBuilder } from '../../plan/store'
 import type { BlockType } from '../../plan/types'
+import { formatAutoLap } from '../../settings/autoLap'
 import { useSettings } from '../../settings/store'
 import { Dialog } from '../Dialog'
 import { BlockEditor } from './BlockEditor'
@@ -46,6 +47,7 @@ export function BuilderView() {
   const restHr = useSettings((s) => s.restHr)
   const autoLap = useSettings((s) => s.autoLap)
   const autoLapDistance = useSettings((s) => s.autoLapDistance)
+  const autoLapUnit = useSettings((s) => s.autoLapUnit)
 
   const steps = useMemo(() => expandPlan(plan, { maxHr, restHr }), [plan, maxHr, restHr])
   const total = useMemo(() => estimateSteps(steps), [steps])
@@ -206,7 +208,7 @@ export function BuilderView() {
             onChange={builder.setDisableAutoLap}
             note={
               autoLap
-                ? `Settings: every ${autoLapDistance.toFixed(2)} ${unit}. Steps always split.`
+                ? `Settings: every ${formatAutoLap(autoLapDistance, autoLapUnit)}. Steps always split.`
                 : 'Auto-lap is off in Settings.'
             }
           />

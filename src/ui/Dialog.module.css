@@ -5,6 +5,8 @@
   display: grid;
   place-items: center;
   background: rgb(6 15 26 / 0.72);
+  /* Sheets and dialogs can open from the status bar, which doesn't wrap. */
+  white-space: normal;
 }
 
 .dialog {

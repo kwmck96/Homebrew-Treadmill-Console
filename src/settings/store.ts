@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { type DistanceUnit, METERS_PER_MILE, type SpeedDisplay } from '../lib/units'
+import type { DistanceUnit, SpeedDisplay } from '../lib/units'
+import { type AutoLapUnit, autoLapToMeters, followDistanceUnit } from './autoLap'
 import type { FieldId } from '../workout/fields'
 
 export interface Preset {
@@ -41,8 +42,9 @@ export interface Settings {
   sounds: boolean
   /** Split a lap automatically every `autoLapDistance`, in every activity. */
   autoLap: boolean
-  /** In the current distance unit: 1 means 1 mi, or 1 km in km mode. */
+  /** In `autoLapUnit`, which is independent of `distanceUnit`. */
   autoLapDistance: number
+  autoLapUnit: AutoLapUnit
 }
 
 interface SettingsActions {
@@ -81,12 +83,13 @@ export const DEFAULT_SETTINGS: Settings = {
   sounds: true,
   autoLap: true,
   autoLapDistance: 1,
+  autoLapUnit: 'mi',
 }
 
 /** Auto-lap distance in metres, or null when auto-lap is off. */
-export function autoLapMeters(s: Pick<Settings, 'autoLap' | 'autoLapDistance' | 'distanceUnit'>): number | null {
+export function autoLapMeters(s: Pick<Settings, 'autoLap' | 'autoLapDistance' | 'autoLapUnit'>): number | null {
   if (!s.autoLap || !(s.autoLapDistance > 0)) return null
-  return s.autoLapDistance * (s.distanceUnit === 'mi' ? METERS_PER_MILE : 1000)
+  return autoLapToMeters(s.autoLapDistance, s.autoLapUnit)
 }
 
 const OLD_DEFAULT_FIELDS = ['elapsed', 'distance', 'lapTime', 'lapDistance', 'avgPace', 'elevGain']
@@ -95,7 +98,15 @@ export const useSettings = create<Settings & SettingsActions>()(
   persist(
     (set) => ({
       ...DEFAULT_SETTINGS,
-      update: (patch) => set(patch),
+      update: (patch) =>
+        set((s) => {
+          // Changing the app's units carries the auto-lap number across.
+          if (patch.distanceUnit && patch.distanceUnit !== s.distanceUnit && !patch.autoLapUnit) {
+            const lap = followDistanceUnit(s.autoLapDistance, s.autoLapUnit, patch.distanceUnit)
+            return { ...patch, autoLapDistance: lap.value, autoLapUnit: lap.unit }
+          }
+          return patch
+        }),
       setPresetValue: (kind, id, value) =>
         set((s) => {
           const key = kind === 'speed' ? 'speedPresets' : 'inclinePresets'
@@ -116,13 +127,18 @@ export const useSettings = create<Settings & SettingsActions>()(
     {
       name: 'htc-settings',
       // Bump when the Settings shape changes and add to `migrate`.
-      version: 2,
+      version: 3,
       migrate: (persisted, version) => {
         const s = persisted as Partial<Settings>
         // v2: new Control Center layout. Untouched old defaults move to the new
         // ones; anything customised is kept.
         if (version < 2 && JSON.stringify(s.dataFields) === JSON.stringify(OLD_DEFAULT_FIELDS)) {
           s.dataFields = DEFAULT_SETTINGS.dataFields
+        }
+        // v3: auto-lap got its own unit. Before, the number was in the app's unit.
+        if (version < 3 && s.autoLapUnit == null && s.autoLapDistance != null && s.distanceUnit === 'km') {
+          s.autoLapDistance = Math.round(s.autoLapDistance * 1000)
+          s.autoLapUnit = 'm'
         }
         return s as Settings & SettingsActions
       },
