@@ -1,0 +1,73 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  background: rgb(6 15 26 / 0.72);
+  /* Sheets and dialogs can open from the status bar, which doesn't wrap. */
+  white-space: normal;
+}
+
+.dialog {
+  width: min(34em, 90vw);
+  padding: 1.3em 1.4em;
+  background: var(--lane);
+  border: 2px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.dialog[data-tone='warning'] {
+  border-color: var(--speed);
+}
+
+.title {
+  margin: 0 0 0.5em;
+  font-size: 1.35em;
+  font-weight: 650;
+}
+
+.body {
+  max-width: 60ch;
+  color: var(--mist);
+  line-height: 1.45;
+}
+
+.body p {
+  margin: 0 0 0.7em;
+}
+
+.body strong {
+  color: var(--chalk);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--gap);
+  margin-top: 1.2em;
+}
+
+.action {
+  min-height: 3.2em;
+  min-width: 8em;
+  padding: 0 1.4em;
+  border-radius: var(--radius-sm);
+  background: var(--lane-raised);
+  border: 2px solid var(--line);
+  font-weight: 600;
+}
+
+.action[data-tone='primary'] {
+  background: var(--chalk);
+  border-color: var(--chalk);
+  color: var(--night);
+  font-weight: 700;
+}
+
+.action[data-tone='danger'] {
+  background: var(--stop);
+  border-color: var(--stop);
+  color: #fff;
+  font-weight: 700;
+}

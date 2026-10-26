@@ -133,6 +133,47 @@ export function addLap(
   return { ...record, laps, updatedAt: nowEpoch }
 }
 
+/**
+ * Auto-lap: split every `lapM` metres of lap distance. `prev` and `next` are
+ * the record before and after one `advance` step; the split is placed at the
+ * exact crossing by interpolating between them, so a 1 mi lap is 1.00 mi
+ * whatever the tick size. Counts from the start of the current lap, so a
+ * manual split restarts the count. Several crossings in one step all split.
+ */
+export function autoLap(
+  prev: WorkoutRecord,
+  next: WorkoutRecord,
+  lapM: number,
+  nowEpoch: number,
+): WorkoutRecord {
+  if (next.status === 'finished' || !(lapM > 0)) return next
+  let rec = next
+  // A bounded loop: one split per lap distance covered in this step.
+  for (let guard = 0; guard < 100; guard++) {
+    const lap = currentLap(rec)
+    const target = lap.startDistanceM + lapM
+    if (rec.distanceM < target) return rec
+    const span = next.distanceM - prev.distanceM
+    // Already past the mark before this step (e.g. lap distance shortened
+    // mid-lap): split now.
+    const f = span > 0 && prev.distanceM < target ? (target - prev.distanceM) / span : 1
+    const at = (a: number, b: number) => a + (b - a) * f
+    const point = {
+      ...rec,
+      elapsedMs: at(prev.elapsedMs, next.elapsedMs),
+      distanceM: f === 1 ? next.distanceM : target,
+      elevGainM: at(prev.elevGainM, next.elevGainM),
+      elevLossM: at(prev.elevLossM, next.elevLossM),
+    }
+    const laps = closeCurrentLap(point)
+    laps.push(
+      openLap(laps.length + 1, 'auto', point.elapsedMs, point.distanceM, point.elevGainM, point.elevLossM),
+    )
+    rec = { ...rec, laps, updatedAt: nowEpoch }
+  }
+  return rec
+}
+
 export function finish(record: WorkoutRecord, nowEpoch: number): WorkoutRecord {
   if (record.status === 'finished') return record
   return {

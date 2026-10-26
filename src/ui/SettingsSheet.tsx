@@ -1,5 +1,12 @@
 import type { ReactNode } from 'react'
 import { quantize } from '../treadmill/limits'
+import {
+  AUTO_LAP_LIMITS,
+  AUTO_LAP_PICKS,
+  convertAutoLap,
+  formatAutoLap,
+  stepAutoLap,
+} from '../settings/autoLap'
 import { useSettings } from '../settings/store'
 import { useConsole } from '../workout/store'
 import { HoldButton } from './HoldButton'
@@ -91,6 +98,82 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
         />
       </Row>
 
+      <Row
+        label="Auto-lap"
+        hint="Splits a lap every set distance, in every activity. Counts from the last split, so a manual split restarts it."
+      >
+        <Segmented
+          value={s.autoLap ? 'on' : 'off'}
+          options={[
+            ['on', 'On'],
+            ['off', 'Off'],
+          ]}
+          onChange={(v) => s.update({ autoLap: v === 'on' })}
+        />
+      </Row>
+
+      <Row
+        label="Auto-lap distance"
+        hint={
+          s.autoLap
+            ? 'Has its own unit, so you can run in miles and still split every 400 m. Changing distance units carries the number across: 1 mi becomes 1000 m.'
+            : 'Auto-lap is off.'
+        }
+      >
+        <div className={styles.autoLapDistance}>
+          <Segmented
+            value={s.autoLapUnit}
+            options={[
+              ['mi', 'Miles'],
+              ['m', 'Meters'],
+            ]}
+            onChange={(unit) =>
+              s.update({
+                autoLapUnit: unit,
+                autoLapDistance: convertAutoLap(s.autoLapDistance, s.autoLapUnit, unit),
+              })
+            }
+            disabled={!s.autoLap}
+            label="Auto-lap unit"
+          />
+          <div className={styles.stepper}>
+            <HoldButton
+              className={styles.stepperButton}
+              aria-label="Shorter auto-lap distance"
+              disabled={!s.autoLap || s.autoLapDistance <= AUTO_LAP_LIMITS[s.autoLapUnit].min}
+              onTrigger={() =>
+                s.update({ autoLapDistance: stepAutoLap(s.autoLapDistance, s.autoLapUnit, -1) })
+              }
+            >
+              −
+            </HoldButton>
+            <span className={`${styles.stepperValue} num`}>
+              {formatAutoLap(s.autoLapDistance, s.autoLapUnit)}
+            </span>
+            <HoldButton
+              className={styles.stepperButton}
+              aria-label="Longer auto-lap distance"
+              disabled={!s.autoLap || s.autoLapDistance >= AUTO_LAP_LIMITS[s.autoLapUnit].max}
+              onTrigger={() =>
+                s.update({ autoLapDistance: stepAutoLap(s.autoLapDistance, s.autoLapUnit, 1) })
+              }
+            >
+              +
+            </HoldButton>
+          </div>
+          {s.autoLap && (
+            <Segmented
+              value={String(s.autoLapDistance)}
+              options={AUTO_LAP_PICKS[s.autoLapUnit].map(
+                (d) => [String(d), `${d} ${s.autoLapUnit}`] as [string, string],
+              )}
+              onChange={(v) => s.update({ autoLapDistance: Number(v) })}
+              label="Auto-lap quick picks"
+            />
+          )}
+        </div>
+      </Row>
+
       <Row label="Reset" hint="Restores presets, fields and units to their defaults.">
         <button
           type="button"
@@ -121,23 +204,28 @@ function Segmented<T extends string>({
   value,
   options,
   onChange,
+  disabled,
+  label,
 }: {
   value: T
   options: [T, string][]
   onChange: (v: T) => void
+  disabled?: boolean
+  label?: string
 }) {
   return (
-    <div className={styles.segmented} role="radiogroup">
-      {options.map(([v, label]) => (
+    <div className={styles.segmented} role="radiogroup" aria-label={label}>
+      {options.map(([v, text]) => (
         <button
           key={v}
           type="button"
           role="radio"
           aria-checked={value === v}
           className={styles.segment}
+          disabled={disabled}
           onClick={() => onChange(v)}
         >
-          {label}
+          {text}
         </button>
       ))}
     </div>

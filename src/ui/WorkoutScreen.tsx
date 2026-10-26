@@ -1,4 +1,5 @@
 import { useSettings } from '../settings/store'
+import { BuilderView } from './builder/BuilderView'
 import { useConsole } from '../workout/store'
 import { ChartsView } from './charts/ChartsView'
 import { ControlCenterView } from './ControlCenterView'
@@ -17,7 +18,7 @@ export function WorkoutScreen() {
   return (
     <div className={styles.screen}>
       <StatusBar />
-      {view === 'charts' ? <ChartsView /> : <ControlCenterView />}
+      {view === 'charts' ? <ChartsView /> : view === 'builder' ? <BuilderView /> : <ControlCenterView />}
     </div>
   )
 }

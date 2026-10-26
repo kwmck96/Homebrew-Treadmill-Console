@@ -1,7 +1,8 @@
 .bar {
   display: flex;
   align-items: center;
-  gap: calc(var(--gap) * 1.5);
+  gap: var(--gap);
+  white-space: nowrap;
   min-height: 3.6em;
   padding: 0 calc(var(--gap) * 0.5) 0 calc(var(--gap) * 1.2);
 }
@@ -44,7 +45,7 @@
 
 .tool {
   min-height: 2.8em;
-  padding: 0 1.1em;
+  padding: 0 0.9em;
   border-radius: var(--radius-sm);
   background: var(--lane);
   color: var(--mist);
@@ -52,8 +53,8 @@
 
 .stop {
   min-height: 3em;
-  min-width: 9em;
-  padding: 0 1.4em;
+  min-width: 7.5em;
+  padding: 0 1.2em;
   border-radius: var(--radius-sm);
   background: var(--stop);
   color: #fff;
@@ -85,7 +86,7 @@
 
 .viewTab {
   min-height: 2.6em;
-  padding: 0 1.3em;
+  padding: 0 1em;
   border-radius: calc(var(--radius-sm) - 2px);
   background: transparent;
   color: var(--mist);

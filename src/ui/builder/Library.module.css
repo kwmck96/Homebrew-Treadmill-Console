@@ -1,0 +1,84 @@
+.nameLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+  color: var(--mist);
+  font-size: 0.9em;
+}
+
+.nameInput {
+  min-height: 2.8em;
+  padding: 0 0.8em;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--line);
+  background: var(--night);
+  color: var(--chalk);
+  font: inherit;
+  font-size: 1.15em;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.nameInput:focus {
+  outline: none;
+  border-color: var(--chalk);
+}
+
+.empty {
+  margin: 1em 0;
+  color: var(--mist);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  padding: 0.8em 0;
+}
+
+.row + .row {
+  border-top: 2px solid var(--line);
+}
+
+.info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+}
+
+.rowName {
+  font-weight: 650;
+  font-size: 1.1em;
+}
+
+.rowMeta {
+  color: var(--mist);
+  font-size: 0.85em;
+}
+
+.load,
+.delete {
+  min-height: 2.8em;
+  padding: 0 1.2em;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+}
+
+.load {
+  background: var(--chalk);
+  color: var(--night);
+}
+
+.delete {
+  background: transparent;
+  border: 2px solid var(--line);
+  color: var(--stop);
+}

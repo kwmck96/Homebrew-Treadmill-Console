@@ -92,3 +92,10 @@
   font-size: 1.15em;
   font-weight: 600;
 }
+
+.autoLapDistance {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.6em;
+}

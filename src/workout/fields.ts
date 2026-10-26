@@ -15,6 +15,7 @@ import {
   paceUnitLabel,
   speedUnitLabel,
 } from '../lib/units'
+import { hrColor } from '../lib/hrColor'
 import { averageHr, currentLap, lapAverageHr, lapTotals } from './engine'
 import type { WorkoutRecord } from './types'
 
@@ -30,6 +31,8 @@ export interface FieldContext {
 export interface FieldValue {
   value: string
   unit?: string
+  /** Optional colour for the value (heart rate uses its colour scale). */
+  color?: string
 }
 
 export interface FieldDef {
@@ -150,7 +153,11 @@ const FIELD_DEFS = [
   {
     id: 'heartRate',
     label: 'Heart Rate',
-    compute: ({ heartRateBpm }) => ({ value: formatBpm(heartRateBpm), unit: 'bpm' }),
+    compute: ({ heartRateBpm }) => ({
+      value: formatBpm(heartRateBpm),
+      unit: 'bpm',
+      color: hrColor(heartRateBpm),
+    }),
   },
   {
     id: 'avgHr',

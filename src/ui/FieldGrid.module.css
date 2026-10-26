@@ -7,6 +7,11 @@
   min-height: 0;
 }
 
+/* The first two slots span the full width. */
+.tile[data-wide='true'] {
+  grid-column: 1 / -1;
+}
+
 .tile {
   display: flex;
   flex-direction: column;
@@ -52,6 +57,11 @@
 }
 
 .option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15em;
   min-height: 3.6em;
   border-radius: var(--radius-sm);
   background: var(--lane-raised);
@@ -62,4 +72,14 @@
   background: var(--chalk);
   color: var(--night);
   font-weight: 700;
+}
+
+.swap {
+  color: var(--mist);
+  font-size: 0.72em;
+  font-weight: 500;
+}
+
+.option[data-selected='true'] .swap {
+  color: var(--night);
 }

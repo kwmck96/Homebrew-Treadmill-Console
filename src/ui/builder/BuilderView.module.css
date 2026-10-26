@@ -1,0 +1,340 @@
+.view {
+  display: grid;
+  grid-template-columns: 11.5em minmax(0, 1fr) minmax(0, 1.05fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: var(--gap);
+  min-height: 0;
+}
+
+/* ---- palette ---- */
+
+.palette {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45em;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.paletteTitle {
+  margin: 0.2em 0 0.1em 0.2em;
+  color: var(--mist);
+  font-size: 0.9em;
+  font-weight: 600;
+}
+
+.tile {
+  flex: none;
+  min-height: 3em;
+  padding: 0 0.9em;
+  border-radius: var(--radius-sm);
+  background: var(--lane);
+  border-left: 0.35em solid var(--accent, var(--line));
+  text-align: left;
+  font-weight: 600;
+  /* Drags start from here; stop the page from scrolling instead. */
+  touch-action: none;
+}
+
+.tile:active {
+  background: var(--lane-raised);
+}
+
+.tile[data-accent='speed'],
+.card[data-accent='speed'] {
+  --accent: var(--speed);
+}
+
+.tile[data-accent='grade'],
+.card[data-accent='grade'] {
+  --accent: var(--grade);
+}
+
+.tile[data-accent='mist'],
+.card[data-accent='mist'] {
+  --accent: var(--mist);
+}
+
+.tile[data-accent='line'],
+.card[data-accent='line'] {
+  --accent: var(--line);
+}
+
+.paletteHint {
+  margin: 0.3em 0.2em 0;
+  color: var(--mist);
+  font-size: 0.75em;
+  line-height: 1.35;
+}
+
+/* ---- workout list ---- */
+
+.workout {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--lane);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.workoutHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  padding: var(--gap) calc(var(--gap) * 1.3);
+  border-bottom: 2px solid var(--line);
+}
+
+.name {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+  min-width: 0;
+  background: none;
+  text-align: left;
+  font-size: 1.2em;
+  font-weight: 650;
+}
+
+.rename {
+  color: var(--mist);
+  font-size: 0.65em;
+  font-weight: 500;
+  text-decoration: underline;
+}
+
+.unsaved {
+  color: var(--speed);
+  font-size: 0.8em;
+}
+
+.list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  margin: 0;
+  padding: var(--gap);
+  list-style: none;
+  overflow-y: auto;
+  touch-action: pan-y;
+}
+
+.empty {
+  margin: auto;
+  max-width: 24em;
+  padding: 2em 1em;
+  color: var(--mist);
+  text-align: center;
+  line-height: 1.45;
+}
+
+.card {
+  display: flex;
+  align-items: stretch;
+  background: var(--lane-raised);
+  border-radius: var(--radius-sm);
+  border-left: 0.35em solid var(--accent, var(--line));
+}
+
+.card[data-selected='true'] {
+  box-shadow: inset 0 0 0 2px var(--chalk);
+}
+
+.card[data-dragging='true'] {
+  opacity: 0.4;
+}
+
+/* Grip dots: the only place a card drag starts, so the list still scrolls. */
+.handle {
+  flex: none;
+  width: 2.6em;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  touch-action: none;
+  cursor: grab;
+}
+
+.handle span {
+  width: 0.45em;
+  height: 1.6em;
+  background-image: radial-gradient(circle, var(--mist) 1.6px, transparent 2px);
+  background-size: 0.45em 0.4em;
+}
+
+.cardBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+  padding: 0.6em 0.9em 0.6em 0.1em;
+  background: transparent;
+  text-align: left;
+}
+
+.cardTitle {
+  font-weight: 700;
+}
+
+.cardSummary {
+  color: var(--mist);
+  font-size: 0.88em;
+  line-height: 1.35;
+}
+
+.cardEstimate {
+  display: flex;
+  gap: 1.2em;
+  margin-top: 0.15em;
+  font-size: 0.85em;
+}
+
+.cardEstimate [data-sign='up'] {
+  color: var(--go);
+}
+
+.cardEstimate [data-sign='down'] {
+  color: var(--stop);
+}
+
+.dropLine {
+  flex: none;
+  height: 0.3em;
+  margin: -0.15em 0;
+  border-radius: 999px;
+  background: var(--chalk);
+}
+
+.ghost {
+  position: fixed;
+  z-index: 70;
+  padding: 0.6em 1em;
+  border-radius: var(--radius-sm);
+  background: var(--chalk);
+  color: var(--night);
+  font-weight: 700;
+  pointer-events: none;
+  box-shadow: 0 0.8em 2em rgb(0 0 0 / 0.5);
+}
+
+/* ---- footer: estimates and actions ---- */
+
+.footer {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--gap) * 2);
+  padding: 0.4em calc(var(--gap) * 1.3);
+  background: var(--lane);
+  border-radius: var(--radius-lg);
+}
+
+.totals {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4em 2em;
+  min-width: 0;
+}
+
+.total {
+  display: flex;
+  flex-direction: column;
+}
+
+.totalLabel {
+  color: var(--mist);
+  font-size: 0.8em;
+}
+
+.totalValue {
+  font-size: 1.75em;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.totalValue small {
+  font-size: 0.5em;
+  font-weight: 500;
+  color: var(--mist);
+}
+
+.totalValue[data-sign='up'] {
+  color: var(--go);
+}
+
+.totalValue[data-sign='down'] {
+  color: var(--stop);
+}
+
+/* Gain over loss at half height, then the net change full size. */
+.elevation {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+}
+
+.elevStack {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85em;
+  font-weight: 650;
+  line-height: 1.15;
+}
+
+.gain {
+  color: var(--go);
+}
+
+.loss {
+  color: var(--stop);
+}
+
+.totalNote {
+  color: var(--mist);
+  font-size: 0.8em;
+}
+
+.actions {
+  display: flex;
+  gap: var(--gap);
+}
+
+.action {
+  min-height: 3.2em;
+  padding: 0 1.1em;
+  border-radius: var(--radius-sm);
+  background: var(--lane-raised);
+  border: 2px solid var(--line);
+  font-weight: 600;
+}
+
+.start {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 3.2em;
+  padding: 0 1.4em;
+  border-radius: var(--radius-sm);
+  background: var(--go);
+  color: #04210f;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.start small {
+  font-size: 0.7em;
+  font-weight: 500;
+}
+
+.autoLap {
+  padding: calc(var(--gap) * 0.6) calc(var(--gap) * 1.3);
+  border-top: 2px solid var(--line);
+  font-size: 0.9em;
+}

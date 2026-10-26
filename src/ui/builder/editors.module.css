@@ -1,0 +1,34 @@
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+}
+
+.chip {
+  min-height: 2.4em;
+  padding: 0 0.9em;
+  border-radius: 999px;
+  background: transparent;
+  border: 2px solid var(--line);
+  color: var(--mist);
+  font-size: 0.85em;
+}
+
+.chip[aria-pressed='true'] {
+  border-color: var(--chalk);
+  color: var(--chalk);
+  font-weight: 700;
+}
+
+.small {
+  margin-left: 0.2em;
+  color: var(--mist);
+  font-size: 0.6em;
+  font-weight: 500;
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.8em;
+}

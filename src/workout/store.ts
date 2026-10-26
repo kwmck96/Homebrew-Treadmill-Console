@@ -6,7 +6,7 @@
 import { create } from 'zustand'
 import { SimulatedHeartRate } from '../heartrate/simulator'
 import type { HeartRateSource, HeartRateState } from '../heartrate/types'
-import { useSettings } from '../settings/store'
+import { autoLapMeters, useSettings } from '../settings/store'
 import { clampIncline, clampSpeed, TRM885_LIMITS } from '../treadmill/limits'
 import { SimulatedTreadmill } from '../treadmill/simulator'
 import type { TreadmillDriver, TreadmillLimits, TreadmillState } from '../treadmill/types'
@@ -183,6 +183,7 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
     }
 
     let next = workout
+    const lapM = autoLapMeters(useSettings.getState())
     for (let left = dt; left > 0; left -= MAX_SUBSTEP_MS) {
       const step = Math.min(left, MAX_SUBSTEP_MS)
       feedHr(step)
@@ -192,7 +193,9 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
         connected: treadmill.connection === 'connected',
         heartRateBpm: get().heartRate.bpm,
       }
+      const before = next
       next = engine.advance(next, reading, step, now())
+      if (lapM != null) next = engine.autoLap(before, next, lapM, now())
     }
     set({ workout: next })
 

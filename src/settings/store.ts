@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { DistanceUnit, SpeedDisplay } from '../lib/units'
+import { type AutoLapUnit, autoLapToMeters, followDistanceUnit } from './autoLap'
 import type { FieldId } from '../workout/fields'
 
 export interface Preset {
@@ -9,7 +10,7 @@ export interface Preset {
   value: number
 }
 
-export type ConsoleView = 'control' | 'charts'
+export type ConsoleView = 'control' | 'charts' | 'builder'
 export type ChartRange = '5' | '15' | 'full'
 
 export interface Settings {
@@ -34,11 +35,22 @@ export interface Settings {
   lapOnSpeedPresetTap: boolean
   /** Control Center: tapping an incline preset also splits a lap. */
   lapOnInclinePresetTap: boolean
+  /** For HR zones (heart-rate reserve model). */
+  maxHr: number
+  restHr: number
+  /** Beeps for workout step changes. */
+  sounds: boolean
+  /** Split a lap automatically every `autoLapDistance`, in every activity. */
+  autoLap: boolean
+  /** In `autoLapUnit`, which is independent of `distanceUnit`. */
+  autoLapDistance: number
+  autoLapUnit: AutoLapUnit
 }
 
 interface SettingsActions {
   update: (patch: Partial<Settings>) => void
   setPresetValue: (kind: 'speed' | 'incline', id: string, value: number) => void
+  /** Put `field` in `slot`; if it's already shown elsewhere, the two swap. */
   setDataField: (slot: number, field: FieldId) => void
   resetToDefaults: () => void
 }
@@ -59,19 +71,42 @@ export const DEFAULT_SETTINGS: Settings = {
     { id: 'road', label: 'Road', value: 1 },
     { id: 'hill', label: 'Hill', value: 4 },
   ],
-  dataFields: ['elapsed', 'distance', 'lapTime', 'lapDistance', 'avgPace', 'elevGain'],
+  // Control Center: two full-width slots on top, then a 2 × 2 grid.
+  dataFields: ['elapsed', 'heartRate', 'distance', 'lapTime', 'lapDistance', 'avgPace'],
   view: 'control',
   chartRange: '15',
   lapOnPresetTap: true,
   lapOnSpeedPresetTap: true,
   lapOnInclinePresetTap: true,
+  maxHr: 190,
+  restHr: 55,
+  sounds: true,
+  autoLap: true,
+  autoLapDistance: 1,
+  autoLapUnit: 'mi',
 }
+
+/** Auto-lap distance in metres, or null when auto-lap is off. */
+export function autoLapMeters(s: Pick<Settings, 'autoLap' | 'autoLapDistance' | 'autoLapUnit'>): number | null {
+  if (!s.autoLap || !(s.autoLapDistance > 0)) return null
+  return autoLapToMeters(s.autoLapDistance, s.autoLapUnit)
+}
+
+const OLD_DEFAULT_FIELDS = ['elapsed', 'distance', 'lapTime', 'lapDistance', 'avgPace', 'elevGain']
 
 export const useSettings = create<Settings & SettingsActions>()(
   persist(
     (set) => ({
       ...DEFAULT_SETTINGS,
-      update: (patch) => set(patch),
+      update: (patch) =>
+        set((s) => {
+          // Changing the app's units carries the auto-lap number across.
+          if (patch.distanceUnit && patch.distanceUnit !== s.distanceUnit && !patch.autoLapUnit) {
+            const lap = followDistanceUnit(s.autoLapDistance, s.autoLapUnit, patch.distanceUnit)
+            return { ...patch, autoLapDistance: lap.value, autoLapUnit: lap.unit }
+          }
+          return patch
+        }),
       setPresetValue: (kind, id, value) =>
         set((s) => {
           const key = kind === 'speed' ? 'speedPresets' : 'inclinePresets'
@@ -80,6 +115,8 @@ export const useSettings = create<Settings & SettingsActions>()(
       setDataField: (slot, field) =>
         set((s) => {
           const dataFields = [...s.dataFields]
+          const other = dataFields.indexOf(field)
+          if (other >= 0 && other !== slot) dataFields[other] = dataFields[slot]
           dataFields[slot] = field
           return { dataFields }
         }),
@@ -89,8 +126,22 @@ export const useSettings = create<Settings & SettingsActions>()(
     }),
     {
       name: 'htc-settings',
-      // Bump when the Settings shape changes and add a `migrate` function.
-      version: 1,
+      // Bump when the Settings shape changes and add to `migrate`.
+      version: 3,
+      migrate: (persisted, version) => {
+        const s = persisted as Partial<Settings>
+        // v2: new Control Center layout. Untouched old defaults move to the new
+        // ones; anything customised is kept.
+        if (version < 2 && JSON.stringify(s.dataFields) === JSON.stringify(OLD_DEFAULT_FIELDS)) {
+          s.dataFields = DEFAULT_SETTINGS.dataFields
+        }
+        // v3: auto-lap got its own unit. Before, the number was in the app's unit.
+        if (version < 3 && s.autoLapUnit == null && s.autoLapDistance != null && s.distanceUnit === 'km') {
+          s.autoLapDistance = Math.round(s.autoLapDistance * 1000)
+          s.autoLapUnit = 'm'
+        }
+        return s as Settings & SettingsActions
+      },
     },
   ),
 )
