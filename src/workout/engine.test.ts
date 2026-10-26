@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { METERS_PER_MILE } from '../lib/units'
-import { addLap, advance, createWorkout, currentLap, finish, lapTotals, pause, resume } from './engine'
+import { addLap, advance, autoLap, createWorkout, currentLap, finish, lapTotals, pause, resume } from './engine'
 import { FIELDS_BY_ID } from './fields'
 import type { WorkoutRecord } from './types'
 
@@ -104,5 +104,59 @@ describe('fields', () => {
     }
     expect(FIELDS_BY_ID.currentPace.compute(ctx).value).toBe('--:--')
     expect(FIELDS_BY_ID.elapsed.compute(ctx).value).toBe('0:00')
+  })
+})
+
+describe('auto-lap', () => {
+  const at = (mph: number, incline = 0) => ({ actualSpeedMph: mph, actualInclinePct: incline, connected: true })
+  // Run at `mph` in `stepMs` steps for `seconds`, auto-lapping every `lapM`.
+  function run(mph: number, seconds: number, lapM: number, stepMs = 1000, start = createWorkout(0)) {
+    let w = start
+    for (let t = 0; t < seconds * 1000; t += stepMs) {
+      const prev = w
+      w = autoLap(prev, advance(prev, at(mph), stepMs, 0), lapM, 0)
+    }
+    return w
+  }
+
+  it('splits at exactly the lap distance, with interpolated time', () => {
+    // 6 mph = 10:00/mi. 1 mi takes exactly 600 s; 2 s steps straddle it.
+    const w = run(6, 601, METERS_PER_MILE, 2000)
+    expect(w.laps).toHaveLength(2)
+    expect(w.laps[1].trigger).toBe('auto')
+    const lap1 = lapTotals(w, w.laps[0])
+    expect(lap1.distanceM).toBeCloseTo(METERS_PER_MILE, 6)
+    expect(lap1.elapsedMs).toBeCloseTo(600_000, 0)
+  })
+
+  it('does nothing short of the distance', () => {
+    expect(run(6, 590, METERS_PER_MILE).laps).toHaveLength(1)
+  })
+
+  it('counts from the last lap, so a manual split restarts it', () => {
+    let w = run(6, 300, METERS_PER_MILE) // half a mile
+    w = addLap(w, 0, 'manual')
+    w = run(6, 590, METERS_PER_MILE, 1000, w)
+    expect(w.laps).toHaveLength(2)
+    w = run(6, 20, METERS_PER_MILE, 1000, w)
+    expect(w.laps).toHaveLength(3)
+    expect(lapTotals(w, w.laps[1]).distanceM).toBeCloseTo(METERS_PER_MILE, 6)
+  })
+
+  it('splits more than once in one long step', () => {
+    const prev = createWorkout(0)
+    // 12 mph for 5 min = 1 mi; 400 m laps → 4 splits.
+    let rec = prev
+    for (let i = 0; i < 150; i++) rec = advance(rec, at(12), 2000, 0)
+    const split = autoLap(prev, rec, 400, 0)
+    expect(split.laps).toHaveLength(5)
+    expect(lapTotals(split, split.laps[2]).distanceM).toBeCloseTo(400, 6)
+  })
+
+  it('splits right away when the lap is already past a shortened distance', () => {
+    const w = run(6, 300, METERS_PER_MILE)
+    const same = autoLap(w, w, 400, 0)
+    expect(same.laps).toHaveLength(2)
+    expect(currentLap(same).startDistanceM).toBeCloseTo(w.distanceM, 6)
   })
 })

@@ -115,6 +115,8 @@ export interface WorkoutPlan {
   schemaVersion: 1
   name: string
   blocks: Block[]
+  /** Turn off distance auto-lap (Settings) for this workout; steps still split. */
+  disableAutoLap?: boolean
 }
 
 /** Resting and max HR, for computed zones. */

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { DistanceUnit, SpeedDisplay } from '../lib/units'
+import { type DistanceUnit, METERS_PER_MILE, type SpeedDisplay } from '../lib/units'
 import type { FieldId } from '../workout/fields'
 
 export interface Preset {
@@ -39,6 +39,10 @@ export interface Settings {
   restHr: number
   /** Beeps for workout step changes. */
   sounds: boolean
+  /** Split a lap automatically every `autoLapDistance`, in every activity. */
+  autoLap: boolean
+  /** In the current distance unit: 1 means 1 mi, or 1 km in km mode. */
+  autoLapDistance: number
 }
 
 interface SettingsActions {
@@ -75,6 +79,14 @@ export const DEFAULT_SETTINGS: Settings = {
   maxHr: 190,
   restHr: 55,
   sounds: true,
+  autoLap: true,
+  autoLapDistance: 1,
+}
+
+/** Auto-lap distance in metres, or null when auto-lap is off. */
+export function autoLapMeters(s: Pick<Settings, 'autoLap' | 'autoLapDistance' | 'distanceUnit'>): number | null {
+  if (!s.autoLap || !(s.autoLapDistance > 0)) return null
+  return s.autoLapDistance * (s.distanceUnit === 'mi' ? METERS_PER_MILE : 1000)
 }
 
 const OLD_DEFAULT_FIELDS = ['elapsed', 'distance', 'lapTime', 'lapDistance', 'avgPace', 'elevGain']

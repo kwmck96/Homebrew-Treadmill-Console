@@ -26,6 +26,7 @@ interface BuilderActions {
   duplicateBlock: (id: string) => void
   select: (id: string | null) => void
   rename: (name: string) => void
+  setDisableAutoLap: (disabled: boolean) => void
   reset: () => void
   load: (plan: WorkoutPlan, libraryId: string | null) => void
   markSaved: (libraryId: string, name: string) => void
@@ -82,6 +83,8 @@ export const useBuilder = create<BuilderState & BuilderActions>()(
       select: (selectedId) => set({ selectedId }),
 
       rename: (name) => set((s) => ({ plan: { ...s.plan, name }, dirty: true })),
+      setDisableAutoLap: (disableAutoLap) =>
+        set((s) => ({ plan: { ...s.plan, disableAutoLap }, dirty: true })),
 
       reset: () => set({ plan: emptyPlan(), libraryId: null, dirty: false, selectedId: null }),
 

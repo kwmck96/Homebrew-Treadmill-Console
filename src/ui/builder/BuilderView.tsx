@@ -9,6 +9,7 @@ import type { BlockType } from '../../plan/types'
 import { useSettings } from '../../settings/store'
 import { Dialog } from '../Dialog'
 import { BlockEditor } from './BlockEditor'
+import { Check } from './controls'
 import styles from './BuilderView.module.css'
 import { LibrarySheet, SaveDialog } from './Library'
 
@@ -43,6 +44,8 @@ export function BuilderView() {
   const unit = useSettings((s) => s.distanceUnit)
   const maxHr = useSettings((s) => s.maxHr)
   const restHr = useSettings((s) => s.restHr)
+  const autoLap = useSettings((s) => s.autoLap)
+  const autoLapDistance = useSettings((s) => s.autoLapDistance)
 
   const steps = useMemo(() => expandPlan(plan, { maxHr, restHr }), [plan, maxHr, restHr])
   const total = useMemo(() => estimateSteps(steps), [steps])
@@ -196,6 +199,18 @@ export function BuilderView() {
           ))}
           {showLineAt(plan.blocks.length) && <li className={styles.dropLine} aria-hidden="true" />}
         </ol>
+        <div className={styles.autoLap}>
+          <Check
+            label="Disable auto-lap"
+            checked={plan.disableAutoLap ?? false}
+            onChange={builder.setDisableAutoLap}
+            note={
+              autoLap
+                ? `Settings: every ${autoLapDistance.toFixed(2)} ${unit}. Steps always split.`
+                : 'Auto-lap is off in Settings.'
+            }
+          />
+        </div>
       </section>
 
       <BlockEditor block={selected} unit={unit} nextSpeedMph={nextSpeed} />

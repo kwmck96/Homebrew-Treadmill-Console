@@ -91,6 +91,58 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
         />
       </Row>
 
+      <Row
+        label="Auto-lap"
+        hint="Splits a lap every set distance, in every activity. Counts from the last split, so a manual split restarts it."
+      >
+        <Segmented
+          value={s.autoLap ? 'on' : 'off'}
+          options={[
+            ['on', 'On'],
+            ['off', 'Off'],
+          ]}
+          onChange={(v) => s.update({ autoLap: v === 'on' })}
+        />
+      </Row>
+
+      <Row
+        label="Auto-lap distance"
+        hint={s.autoLap ? 'In your distance unit, so 1 mi becomes 1 km if you switch to kilometers.' : 'Auto-lap is off.'}
+      >
+        <div className={styles.autoLapDistance}>
+          <div className={styles.stepper}>
+            <HoldButton
+              className={styles.stepperButton}
+              aria-label="Shorter auto-lap distance"
+              disabled={!s.autoLap || s.autoLapDistance <= AUTO_LAP_MIN}
+              onTrigger={() => s.update({ autoLapDistance: stepAutoLap(s.autoLapDistance, -1) })}
+            >
+              −
+            </HoldButton>
+            <span className={`${styles.stepperValue} num`}>
+              {s.autoLapDistance.toFixed(2)} {s.distanceUnit}
+            </span>
+            <HoldButton
+              className={styles.stepperButton}
+              aria-label="Longer auto-lap distance"
+              disabled={!s.autoLap || s.autoLapDistance >= AUTO_LAP_MAX}
+              onTrigger={() => s.update({ autoLapDistance: stepAutoLap(s.autoLapDistance, 1) })}
+            >
+              +
+            </HoldButton>
+          </div>
+          {s.autoLap && (
+            <Segmented
+              value={String(s.autoLapDistance)}
+              options={(s.distanceUnit === 'mi' ? [0.25, 0.5, 1] : [0.4, 0.5, 1]).map(
+                (d) => [String(d), `${d} ${s.distanceUnit}`] as [string, string],
+              )}
+              onChange={(v) => s.update({ autoLapDistance: Number(v) })}
+            />
+          )}
+        </div>
+      </Row>
+
       <Row label="Reset" hint="Restores presets, fields and units to their defaults.">
         <button
           type="button"
@@ -103,6 +155,15 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
       </Row>
     </Sheet>
   )
+}
+
+const AUTO_LAP_MIN = 0.05
+const AUTO_LAP_MAX = 10
+
+/** ±0.05 in the display unit, kept on the 0.05 grid. */
+function stepAutoLap(value: number, dir: 1 | -1): number {
+  const next = Math.round((value + dir * 0.05) * 20) / 20
+  return Math.min(AUTO_LAP_MAX, Math.max(AUTO_LAP_MIN, next))
 }
 
 function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {

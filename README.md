@@ -132,6 +132,7 @@ Internal units: speed in mph and incline in % (the treadmill's native control un
 - **End workout** and **Discard** need a second tap within 3 seconds.
 - Speed and incline buttons only work while a workout is running and the belt is moving.
 - Elevation uses the deck's grade along the belt: vertical = distance × sin(atan(grade)).
+- **Auto-lap** (Settings, on by default at 1.00 mi) splits a lap every set distance in every activity. It counts from the last split, so a manual or preset split restarts it, and the split is placed at the exact distance rather than on the next tick. The distance is in your unit, so 1 mi becomes 1 km in km mode. A workout can turn it off with **Disable auto-lap** in the builder; workout steps always split either way.
 
 ## Placeholders to replace with real measurements
 
