@@ -42,7 +42,7 @@ export function ControlBar() {
           Pause
         </button>
         <button type="button" className={styles.secondary} onClick={() => lap()}>
-          Lap
+          Take Split
         </button>
       </div>
     )

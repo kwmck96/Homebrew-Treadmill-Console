@@ -9,7 +9,7 @@ export interface Preset {
   value: number
 }
 
-export type ConsoleView = 'control' | 'charts'
+export type ConsoleView = 'control' | 'charts' | 'builder'
 export type ChartRange = '5' | '15' | 'full'
 
 export interface Settings {
@@ -34,11 +34,17 @@ export interface Settings {
   lapOnSpeedPresetTap: boolean
   /** Control Center: tapping an incline preset also splits a lap. */
   lapOnInclinePresetTap: boolean
+  /** For HR zones (heart-rate reserve model). */
+  maxHr: number
+  restHr: number
+  /** Beeps for workout step changes. */
+  sounds: boolean
 }
 
 interface SettingsActions {
   update: (patch: Partial<Settings>) => void
   setPresetValue: (kind: 'speed' | 'incline', id: string, value: number) => void
+  /** Put `field` in `slot`; if it's already shown elsewhere, the two swap. */
   setDataField: (slot: number, field: FieldId) => void
   resetToDefaults: () => void
 }
@@ -59,13 +65,19 @@ export const DEFAULT_SETTINGS: Settings = {
     { id: 'road', label: 'Road', value: 1 },
     { id: 'hill', label: 'Hill', value: 4 },
   ],
-  dataFields: ['elapsed', 'distance', 'lapTime', 'lapDistance', 'avgPace', 'elevGain'],
+  // Control Center: two full-width slots on top, then a 2 × 2 grid.
+  dataFields: ['elapsed', 'heartRate', 'distance', 'lapTime', 'lapDistance', 'avgPace'],
   view: 'control',
   chartRange: '15',
   lapOnPresetTap: true,
   lapOnSpeedPresetTap: true,
   lapOnInclinePresetTap: true,
+  maxHr: 190,
+  restHr: 55,
+  sounds: true,
 }
+
+const OLD_DEFAULT_FIELDS = ['elapsed', 'distance', 'lapTime', 'lapDistance', 'avgPace', 'elevGain']
 
 export const useSettings = create<Settings & SettingsActions>()(
   persist(
@@ -80,6 +92,8 @@ export const useSettings = create<Settings & SettingsActions>()(
       setDataField: (slot, field) =>
         set((s) => {
           const dataFields = [...s.dataFields]
+          const other = dataFields.indexOf(field)
+          if (other >= 0 && other !== slot) dataFields[other] = dataFields[slot]
           dataFields[slot] = field
           return { dataFields }
         }),
@@ -89,8 +103,17 @@ export const useSettings = create<Settings & SettingsActions>()(
     }),
     {
       name: 'htc-settings',
-      // Bump when the Settings shape changes and add a `migrate` function.
-      version: 1,
+      // Bump when the Settings shape changes and add to `migrate`.
+      version: 2,
+      migrate: (persisted, version) => {
+        const s = persisted as Partial<Settings>
+        // v2: new Control Center layout. Untouched old defaults move to the new
+        // ones; anything customised is kept.
+        if (version < 2 && JSON.stringify(s.dataFields) === JSON.stringify(OLD_DEFAULT_FIELDS)) {
+          s.dataFields = DEFAULT_SETTINGS.dataFields
+        }
+        return s as Settings & SettingsActions
+      },
     },
   ),
 )

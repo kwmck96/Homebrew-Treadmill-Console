@@ -7,6 +7,7 @@ import {
   paceUnitLabel,
   speedUnitLabel,
 } from '../../lib/units'
+import { hrColor } from '../../lib/hrColor'
 import { useSettings } from '../../settings/store'
 import { quantize } from '../../treadmill/limits'
 import { useConsole } from '../../workout/store'
@@ -32,6 +33,7 @@ const INCLINE_TOLERANCE_PCT = 0.1
 export function ChartsView() {
   const treadmill = useConsole((s) => s.treadmill)
   const workout = useConsole((s) => s.workout)
+  const heartRateBpm = useConsole((s) => s.heartRate.bpm)
   const { nudgeIncline, jumpToPreset } = useConsole.getState()
   const unit = useSettings((s) => s.distanceUnit)
   const speedPresets = useSettings((s) => s.speedPresets)
@@ -83,6 +85,12 @@ export function ChartsView() {
           label="Distance"
           value={formatDistance(workout?.distanceM ?? 0, unit)}
           unit={unit === 'mi' ? 'mi' : 'km'}
+        />
+        <Metric
+          label="Heart rate"
+          value={heartRateBpm == null ? '--' : String(heartRateBpm)}
+          unit="bpm"
+          color={hrColor(heartRateBpm)}
         />
       </div>
 
@@ -145,13 +153,17 @@ function Metric(props: {
   note?: ReactNode
   highlightNote?: boolean
   accent?: 'speed' | 'grade'
+  /** Value colour (heart rate). */
+  color?: string
 }) {
   const style = props.accent ? ({ '--accent': `var(--${props.accent})` } as CSSProperties) : undefined
   return (
     <div className={styles.metric} style={style} data-accent={props.accent ?? 'none'}>
       <span className={styles.metricLabel}>{props.label}</span>
       <span className={styles.metricValueRow}>
-        <span className={`${styles.metricValue} num`}>{props.value}</span>
+        <span className={`${styles.metricValue} num`} style={props.color ? { color: props.color } : undefined}>
+          {props.value}
+        </span>
         {props.unit && <span className={styles.metricUnit}>{props.unit}</span>}
       </span>
       {props.note && (
