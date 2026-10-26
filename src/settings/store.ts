@@ -30,6 +30,10 @@ export interface Settings {
   chartRange: ChartRange
   /** Tapping Run or Recover on the Charts view also splits a lap. */
   lapOnPresetTap: boolean
+  /** Control Center: tapping a speed preset also splits a lap. */
+  lapOnSpeedPresetTap: boolean
+  /** Control Center: tapping an incline preset also splits a lap. */
+  lapOnInclinePresetTap: boolean
 }
 
 interface SettingsActions {
@@ -59,6 +63,8 @@ export const DEFAULT_SETTINGS: Settings = {
   view: 'control',
   chartRange: '15',
   lapOnPresetTap: true,
+  lapOnSpeedPresetTap: true,
+  lapOnInclinePresetTap: true,
 }
 
 export const useSettings = create<Settings & SettingsActions>()(

@@ -61,8 +61,8 @@ interface ConsoleActions {
   setSimTimeScale: (scale: SimTimeScale) => void
   /** Wheel turned: drives the belt while running, otherwise just moves the dial. */
   setDial: (mph: number) => void
-  /** Run / Recover tapped: go to that preset, splitting a lap if enabled. */
-  jumpToPreset: (presetId: string) => void
+  /** A preset was tapped: go to it, splitting a lap first if `lap` is set. */
+  jumpToPreset: (kind: 'speed' | 'incline', presetId: string, lap: boolean) => void
 }
 
 // ---- driver selection ----------------------------------------------------
@@ -309,13 +309,14 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
       if (canDrive()) void driver.setSpeed(value)
     },
 
-    jumpToPreset(presetId) {
+    jumpToPreset(kind, presetId, lap) {
       if (!canDrive()) return
-      const { speedPresets, lapOnPresetTap } = useSettings.getState()
-      const preset = speedPresets.find((p) => p.id === presetId)
+      const { speedPresets, inclinePresets } = useSettings.getState()
+      const preset = (kind === 'speed' ? speedPresets : inclinePresets).find((p) => p.id === presetId)
       if (!preset) return
-      if (lapOnPresetTap) get().lap('preset')
-      get().setSpeed(preset.value)
+      if (lap) get().lap('preset')
+      if (kind === 'speed') get().setSpeed(preset.value)
+      else get().setIncline(preset.value)
     },
 
     setSimTimeScale(scale) {

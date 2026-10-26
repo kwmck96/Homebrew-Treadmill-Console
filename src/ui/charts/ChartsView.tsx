@@ -101,7 +101,9 @@ export function ChartsView() {
               valueMph={recover.value}
               unit={unit}
               canTap={canDrive}
-              onTap={() => jumpToPreset('recovery')}
+              onTap={() =>
+                jumpToPreset('speed', 'recovery', useSettings.getState().lapOnPresetTap)
+              }
               onHold={() => saveWheelTo('recovery')}
             />
           )}
@@ -112,7 +114,7 @@ export function ChartsView() {
               valueMph={run.value}
               unit={unit}
               canTap={canDrive}
-              onTap={() => jumpToPreset('run')}
+              onTap={() => jumpToPreset('speed', 'run', useSettings.getState().lapOnPresetTap)}
               onHold={() => saveWheelTo('run')}
             />
           )}

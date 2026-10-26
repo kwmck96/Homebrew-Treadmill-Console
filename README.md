@@ -13,7 +13,10 @@ Two workout views, switched with the tabs in the status bar:
 **Control Center**
 - Sized for a 10" landscape tablet: speed lane (left), data fields and Start/Pause/Lap (centre), incline lane (right)
 - Separate step buttons with hold-to-repeat: ±1 and ±0.1 mph, ±0.5 % incline
-- Speed presets (Rest 3.0 / Recovery 7.0 / Run 11.0 mph) and incline presets, editable at any time with **Edit presets**
+- Speed presets (Rest 3.0 / Recovery 7.0 / Run 11.0 mph) and incline presets (Flat / Road / Hill)
+  - **Tap** to go to a preset. While that lane's **Lap on tap** switch is on (the default), the tap also splits a lap. Each lane has its own switch in its header.
+  - **Hold** for 0.7 s to save the current setting into the preset: the belt's target speed (or the last one while paused) for speed, the target incline for incline. A bar fills while you hold and the button shows "Saved".
+  - **Edit** opens −/+ fine-tuning and "Set to current".
 - Target vs. actual for speed and incline; the target pill lights up while the belt or deck is still catching up
 - Laps, six configurable data fields (tap a tile to change it), including heart rate, average HR and lap average HR
 

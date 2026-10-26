@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from 'react'
 import type { Preset } from '../settings/store'
 import { HoldButton } from './HoldButton'
 import styles from './Lane.module.css'
+import { useTapOrHold } from './useTapOrHold'
 
 export interface StepDef {
   label: string
@@ -25,7 +26,12 @@ interface LaneProps {
   presets: Preset[]
   formatPreset: (value: number) => { main: string; sub?: string }
   activePresetValue: number | null
-  onPreset: (value: number) => void
+  /** Tap: go to the preset (and split a lap if lapOnTap). */
+  onPresetTap: (id: string) => void
+  /** Hold: save the current setting into the preset. */
+  onPresetHold: (id: string) => void
+  lapOnTap: boolean
+  onToggleLapOnTap: () => void
   editing: boolean
   onToggleEditing: () => void
   onPresetChange: (id: string, value: number) => void
@@ -50,11 +56,23 @@ export function Lane(props: LaneProps) {
         <h2 className={styles.title}>{props.title}</h2>
         <button
           type="button"
+          role="switch"
+          aria-checked={props.lapOnTap}
+          aria-label={`Lap when tapping a ${props.title.toLowerCase()} preset`}
+          className={styles.lapToggle}
+          onClick={props.onToggleLapOnTap}
+        >
+          Lap on tap
+          <span className={styles.switch} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
           className={styles.editToggle}
           aria-pressed={props.editing}
+          aria-label={props.editing ? 'Done editing presets' : `Edit ${props.title.toLowerCase()} presets`}
           onClick={props.onToggleEditing}
         >
-          {props.editing ? 'Done' : 'Edit presets'}
+          {props.editing ? 'Done' : 'Edit'}
         </button>
       </header>
 
@@ -92,26 +110,17 @@ export function Lane(props: LaneProps) {
               </div>
             )
           }
-          const active = props.activePresetValue === p.value
           return (
-            <button
+            <PresetButton
               key={p.id}
-              type="button"
-              className={styles.preset}
-              data-active={active}
-              disabled={!props.enabled}
-              onPointerDown={(e) => {
-                // Fire on touch-down for responsiveness, like the step buttons.
-                if (e.button === 0 && props.enabled) props.onPreset(p.value)
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') props.onPreset(p.value)
-              }}
-            >
-              <span className={styles.presetLabel}>{p.label}</span>
-              <span className={`${styles.presetMain} num`}>{f.main}</span>
-              {f.sub && <span className={`${styles.presetSub} num`}>{f.sub}</span>}
-            </button>
+              preset={p}
+              main={f.main}
+              sub={f.sub}
+              active={props.activePresetValue === p.value}
+              canTap={props.enabled}
+              onTap={() => props.onPresetTap(p.id)}
+              onHold={() => props.onPresetHold(p.id)}
+            />
           )
         })}
       </div>
@@ -146,5 +155,39 @@ export function Lane(props: LaneProps) {
         ))}
       </div>
     </section>
+  )
+}
+
+/**
+ * Tap to go to the preset; hold to save the current setting into it. Stays
+ * pressable while the belt is stopped so presets can be saved before a run.
+ */
+function PresetButton(props: {
+  preset: Preset
+  main: string
+  sub?: string
+  active: boolean
+  canTap: boolean
+  onTap: () => void
+  onHold: () => void
+}) {
+  const { holding, saved, handlers } = useTapOrHold(props)
+  return (
+    <button
+      type="button"
+      className={styles.preset}
+      data-active={props.active}
+      data-can-tap={props.canTap}
+      data-holding={holding}
+      data-saved={saved}
+      aria-label={`${props.preset.label}, ${props.main}. Tap to go, hold to set to the current value.`}
+      {...handlers}
+    >
+      <span className={styles.presetLabel}>{saved ? 'Saved' : props.preset.label}</span>
+      <span className={`${styles.presetMain} num`}>{props.main}</span>
+      {props.sub && <span className={`${styles.presetSub} num`}>{props.sub}</span>}
+      <span className={styles.presetHelp}>hold to set</span>
+      <span className={styles.presetProgress} aria-hidden="true" />
+    </button>
   )
 }

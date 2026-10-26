@@ -29,7 +29,7 @@ export function ControlCenterView() {
   const treadmill = useConsole((s) => s.treadmill)
   const workout = useConsole((s) => s.workout)
   const heartRateBpm = useConsole((s) => s.heartRate.bpm)
-  const { setSpeed, nudgeSpeed, setIncline, nudgeIncline } = useConsole.getState()
+  const { nudgeSpeed, nudgeIncline, jumpToPreset } = useConsole.getState()
   const settings = useSettings()
   const [editing, setEditing] = useState<'speed' | 'incline' | null>(null)
 
@@ -44,6 +44,18 @@ export function ControlCenterView() {
     Math.abs(treadmill.targetInclinePct - treadmill.actualInclinePct) > INCLINE_TOLERANCE_PCT
 
   const limits = effectiveLimits()
+
+  // "Current" for hold-to-set and "Set to current": the belt's target speed,
+  // or the last one while stopped (the store's dial value tracks exactly that),
+  // and the deck's target incline.
+  const saveCurrentSpeed = (id: string) =>
+    settings.setPresetValue('speed', id, clampSpeed(useConsole.getState().dialMph, limits))
+  const saveCurrentIncline = (id: string) =>
+    settings.setPresetValue(
+      'incline',
+      id,
+      clampIncline(useConsole.getState().treadmill.targetInclinePct, limits),
+    )
 
   return (
     <main className={styles.main}>
@@ -68,14 +80,17 @@ export function ControlCenterView() {
           sub: `${formatPace(v, unit)}${paceUnitLabel(unit)}`,
         })}
         activePresetValue={canDrive ? treadmill.targetSpeedMph : null}
-        onPreset={setSpeed}
+        onPresetTap={(id) => jumpToPreset('speed', id, settings.lapOnSpeedPresetTap)}
+        onPresetHold={saveCurrentSpeed}
+        lapOnTap={settings.lapOnSpeedPresetTap}
+        onToggleLapOnTap={() =>
+          settings.update({ lapOnSpeedPresetTap: !settings.lapOnSpeedPresetTap })
+        }
         editing={editing === 'speed'}
         onToggleEditing={() => setEditing(editing === 'speed' ? null : 'speed')}
         presetStep={0.1}
         onPresetChange={(id, v) => settings.setPresetValue('speed', id, clampSpeed(v, limits))}
-        onUseCurrent={(id) =>
-          settings.setPresetValue('speed', id, clampSpeed(treadmill.targetSpeedMph, limits))
-        }
+        onUseCurrent={saveCurrentSpeed}
         steps={SPEED_STEPS}
         stepUnit="mph"
         onStep={nudgeSpeed}
@@ -108,16 +123,19 @@ export function ControlCenterView() {
         presets={settings.inclinePresets}
         formatPreset={(v) => ({ main: `${v.toFixed(1)}%` })}
         activePresetValue={canDrive ? treadmill.targetInclinePct : null}
-        onPreset={setIncline}
+        onPresetTap={(id) => jumpToPreset('incline', id, settings.lapOnInclinePresetTap)}
+        onPresetHold={saveCurrentIncline}
+        lapOnTap={settings.lapOnInclinePresetTap}
+        onToggleLapOnTap={() =>
+          settings.update({ lapOnInclinePresetTap: !settings.lapOnInclinePresetTap })
+        }
         editing={editing === 'incline'}
         onToggleEditing={() => setEditing(editing === 'incline' ? null : 'incline')}
         presetStep={0.5}
         onPresetChange={(id, v) =>
           settings.setPresetValue('incline', id, clampIncline(v, limits))
         }
-        onUseCurrent={(id) =>
-          settings.setPresetValue('incline', id, clampIncline(treadmill.targetInclinePct, limits))
-        }
+        onUseCurrent={saveCurrentIncline}
         steps={INCLINE_STEPS}
         stepUnit="percent"
         onStep={nudgeIncline}
