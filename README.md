@@ -27,7 +27,12 @@ Two workout views, switched with the tabs in the status bar:
 - Lap splits down the left: current lap on top, completed laps newest-first with Strava-style bars (longer = faster), lap time, pace, distance and average HR
 - Live graph of speed, incline and heart rate, with alternating grey bands for laps and each lap's time, pace, distance and average HR at the bottom of its band
 - Ranges: **5 min**, **15 min** (default) and **Full**. The x-axis starts at 0–6 min. After 5 minutes, 5 min slides a 6-minute window, 15 min zooms out until it shows 15 minutes then slides, and Full keeps zooming out. All y-axes rescale to the visible data and share gridlines.
-- In 5 and 15 min, drag the graph sideways to look back; **Back to live** returns to following the workout.
+- **Looking back and point-in-time readings**
+  - In 5 and 15 min, drag the graph right to look back. A cursor stays where the live line is normally drawn (1 min in from the right edge), and the data slides under it. A readout beside it shows time, lap, pace (or speed), incline and bpm at that moment.
+  - Once the view reaches the start of the workout, a tap shows the readings under your finger. A swipe that starts toward the start keeps the cursor under your finger; a swipe that starts toward the present scrolls back toward live. One long swipe does the same: when the view hits the start, the cursor detaches and follows your finger.
+  - When everything already fits (Full, or early on), tapping or dragging just moves the cursor. Letting go at the live edge clears it.
+  - **Returning to live:** while running, the graph returns after 10 s untouched, with a "Graph returns in N" bar that shortens across the top. While paused, it stays put until you swipe back to the live end, tap **Back to live**, or resume (resuming returns immediately).
+  - Recording is unaffected: scroll position and cursor are display-only.
 
 **Both**
 - Pause/resume, end-of-workout summary with lap splits
@@ -82,7 +87,8 @@ src/
   settings/    User settings (presets, units, fields), saved in localStorage
   lib/units.ts Unit conversion and formatting
   heartrate/   HeartRateSource interface and the simulated strap (model.ts is the physiology)
-  charts/      Chart math: visible time window, panning, y-scales, thinning long workouts
+  charts/      Chart math: visible time window, panning, y-scales, thinning long workouts,
+               and inspect.ts (look-back gestures and point-in-time readings)
   ui/          React components; ui/charts/ holds the Charts view and its canvas renderer
 ```
 

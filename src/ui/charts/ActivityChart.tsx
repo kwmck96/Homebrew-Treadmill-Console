@@ -1,10 +1,23 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  beginGesture,
+  cursorTime,
+  endGesture,
+  type Gesture,
+  type GestureContext,
+  type InspectState,
+  LIVE,
+  moveGesture,
+} from '../../charts/inspect'
 import { canPan, liveWindow, pannedWindow, type XWindow } from '../../charts/viewport'
 import { formatPace, formatSpeed, paceUnitLabel, speedUnitLabel } from '../../lib/units'
 import { type ChartRange, useSettings } from '../../settings/store'
 import { useConsole } from '../../workout/store'
 import styles from './ActivityChart.module.css'
 import { type ChartColors, drawChart, type PlotRect } from './drawChart'
+
+/** While running, the graph returns to live after this long untouched. */
+const RETURN_AFTER_MS = 10_000
 
 const RANGES: [ChartRange, string][] = [
   ['5', '5 min'],
@@ -26,16 +39,56 @@ export function ActivityChart() {
   const plotRef = useRef<PlotRect | null>(null)
   const [size, setSize] = useState({ w: 0, h: 0, dpr: 1 })
   const [fontsReady, setFontsReady] = useState(false)
-  /** Right edge (ms) while the user has dragged back in time; null = following live. */
-  const [panEndMs, setPanEndMs] = useState<number | null>(null)
-  const dragRef = useRef<{ x: number; endMs: number } | null>(null)
+  /** Dragged-back view and/or scrub cursor. LIVE = following the workout. */
+  const [inspect, setInspectState] = useState<InspectState>(LIVE)
+  // Pointer moves can arrive faster than React re-renders; gestures read the
+  // latest state from this ref rather than a possibly stale render value.
+  const inspectRef = useRef<InspectState>(LIVE)
+  const setInspect = (next: InspectState) => {
+    inspectRef.current = next
+    setInspectState(next)
+  }
+  const gestureRef = useRef<Gesture | null>(null)
+  const [touching, setTouching] = useState(false)
+  /** performance.now() of the last touch, for the return-to-live countdown. */
+  const lastTouchRef = useRef(0)
+  const [returnLeftMs, setReturnLeftMs] = useState(RETURN_AFTER_MS)
 
   const elapsedMs = record?.elapsedMs ?? 0
   const live = liveWindow(elapsedMs, range)
   const pannable = canPan(live, range)
-  const panned = pannable && panEndMs != null ? pannedWindow(live, panEndMs) : null
+  const panned = pannable && inspect.panEndMs != null ? pannedWindow(live, inspect.panEndMs) : null
   const view: XWindow = panned ?? live
   const following = panned == null
+  const cursorMs = record ? cursorTime(inspect, view, panned != null) : null
+  const inspecting = cursorMs != null || panned != null
+  const running = record?.status === 'running'
+  const countingDown = inspecting && running && !touching
+
+  const backToLive = () => {
+    gestureRef.current = null
+    setInspect(LIVE)
+  }
+
+  // Running: return to live after 10 s untouched, with a countdown.
+  useEffect(() => {
+    if (!countingDown) return
+    const id = setInterval(() => {
+      const left = RETURN_AFTER_MS - (performance.now() - lastTouchRef.current)
+      if (left <= 0) backToLive()
+      else setReturnLeftMs(left)
+    }, 200)
+    return () => clearInterval(id)
+  }, [countingDown])
+
+  // Paused: stay put. Resuming returns to live straight away.
+  useEffect(
+    () =>
+      useConsole.subscribe((s, prev) => {
+        if (prev.workout?.status === 'paused' && s.workout?.status === 'running') backToLive()
+      }),
+    [],
+  )
 
   // Measure the canvas box; redraw at the device's pixel density.
   useLayoutEffect(() => {
@@ -77,7 +130,9 @@ export function ActivityChart() {
         record,
         window: view,
         unit,
-        showNow: following && record?.status === 'running',
+        showNow: following && running,
+        cursorMs,
+        speedDisplay,
         colors: theme.colors,
         fontPx: theme.fontPx,
         fontFamily: theme.fontFamily,
@@ -86,33 +141,59 @@ export function ActivityChart() {
     return () => cancelAnimationFrame(frame)
     // `view` is derived from these; listing its fields avoids redraws from
     // a new object identity every render.
-  }, [record, view.startMs, view.endMs, size, unit, following, theme, fontsReady]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [record, view.startMs, view.endMs, size, unit, following, cursorMs, speedDisplay, theme, fontsReady]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const setRange = (r: ChartRange) => {
-    setPanEndMs(null)
+    backToLive()
     useSettings.getState().update({ chartRange: r })
   }
 
-  // Drag to scroll back through the workout (5- and 15-min ranges).
+  // Gestures: drag to scroll back (5/15 min); at the start, or when nothing is
+  // off-screen, tap or pull toward the start to read values under the finger.
+  const gestureContext = (): GestureContext | null => {
+    const plot = plotRef.current
+    const wrap = wrapRef.current
+    if (!plot || !wrap) return null
+    const left = wrap.getBoundingClientRect().left + plot.left
+    // Work out the view from the latest state, not this render's.
+    const s = inspectRef.current
+    const p = pannable && s.panEndMs != null ? pannedWindow(live, s.panEndMs) : null
+    return { live, view: p ?? live, pannable, elapsedMs, plotLeftPx: left, plotWidthPx: plot.width }
+  }
+  const touch = () => {
+    lastTouchRef.current = performance.now()
+    setReturnLeftMs(RETURN_AFTER_MS)
+  }
   const onPointerDown = (e: React.PointerEvent) => {
-    if (!pannable) return
+    const ctx = gestureContext()
+    if (!ctx || !record || e.button !== 0) return
     try {
       e.currentTarget.setPointerCapture(e.pointerId)
     } catch {
       /* synthetic pointer */
     }
-    dragRef.current = { x: e.clientX, endMs: view.endMs }
+    const next = beginGesture(inspectRef.current, ctx, e.clientX)
+    gestureRef.current = next.gesture
+    setInspect(next.state)
+    setTouching(true)
+    touch()
   }
   const onPointerMove = (e: React.PointerEvent) => {
-    const drag = dragRef.current
-    const plot = plotRef.current
-    if (!drag || !plot) return
-    const msPerPx = (view.endMs - view.startMs) / plot.width
-    const next = pannedWindow(live, drag.endMs - (e.clientX - drag.x) * msPerPx)
-    setPanEndMs(next ? next.endMs : null)
+    const g = gestureRef.current
+    const ctx = gestureContext()
+    if (!g || !ctx) return
+    const next = moveGesture(inspectRef.current, g, ctx, e.clientX)
+    gestureRef.current = next.gesture
+    setInspect(next.state)
+    touch()
   }
   const endDrag = () => {
-    dragRef.current = null
+    const g = gestureRef.current
+    const ctx = gestureContext()
+    gestureRef.current = null
+    setTouching(false)
+    touch()
+    if (g && ctx) setInspect(endGesture(inspectRef.current, g, ctx))
   }
 
   const showPace = speedDisplay === 'pace'
@@ -140,8 +221,8 @@ export function ActivityChart() {
           </span>
         </div>
 
-        {!following && (
-          <button type="button" className={styles.live} onClick={() => setPanEndMs(null)}>
+        {inspecting && (
+          <button type="button" className={styles.live} onClick={backToLive}>
             Back to live
           </button>
         )}
@@ -165,7 +246,7 @@ export function ActivityChart() {
       <div
         ref={wrapRef}
         className={styles.canvasWrap}
-        data-pannable={pannable}
+        data-pannable={pannable || inspecting}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
@@ -173,6 +254,19 @@ export function ActivityChart() {
         onLostPointerCapture={endDrag}
       >
         <canvas ref={canvasRef} className={styles.canvas} />
+        {countingDown && (
+          <div className={styles.countdown} role="timer" aria-live="off">
+            <span className={`${styles.countdownText} num`}>
+              Graph returns in {Math.ceil(returnLeftMs / 1000)}
+            </span>
+            <span className={styles.countdownTrack}>
+              <span
+                className={styles.countdownFill}
+                style={{ width: `${(returnLeftMs / RETURN_AFTER_MS) * 100}%` }}
+              />
+            </span>
+          </div>
+        )}
       </div>
     </section>
   )

@@ -18,8 +18,13 @@ import {
   formatDistance,
   formatDuration,
   formatPace,
+  formatSpeed,
   KM_PER_MILE,
+  paceUnitLabel,
+  type SpeedDisplay,
+  speedUnitLabel,
 } from '../../lib/units'
+import { readingAt } from '../../charts/inspect'
 import { lapAverageHr, lapTotals } from '../../workout/engine'
 import type { WorkoutRecord } from '../../workout/types'
 
@@ -42,6 +47,10 @@ export interface ChartInput {
   unit: DistanceUnit
   /** Draw the "now" dots (live and running). */
   showNow: boolean
+  /** Point-in-time reading cursor (moving time, ms), or null. */
+  cursorMs: number | null
+  /** Pace or speed in the cursor readout, matching the big readouts. */
+  speedDisplay: SpeedDisplay
   colors: ChartColors
   /** Root font size in CSS px; everything is sized from it. */
   fontPx: number
@@ -300,7 +309,86 @@ export function drawChart(
     })
   }
 
+  // ---- point-in-time reading ------------------------------------------------
+  const reading = record && input.cursorMs != null ? readingAt(record, input.cursorMs) : null
+  if (reading && reading.t >= win.startMs && reading.t <= win.endMs) {
+    const x = Math.round(xOf(reading.t)) + 0.5
+    ctx.strokeStyle = colors.text
+    ctx.globalAlpha = 0.7
+    ctx.lineWidth = Math.max(1.5, fontPx * 0.08)
+    ctx.beginPath()
+    ctx.moveTo(x, plot.top)
+    ctx.lineTo(x, bandBottom)
+    ctx.stroke()
+    ctx.globalAlpha = 1
+
+    const dots: [number, string][] = [
+      [yOf(toDisplaySpeed(reading.speedMph), speedScale), colors.speed],
+      [yOf(reading.inclinePct, inclineScale), colors.grade],
+    ]
+    if (reading.hr != null && hasHr) dots.push([yOf(reading.hr, hrScale), colors.heart])
+    for (const [y, color] of dots) {
+      ctx.beginPath()
+      ctx.arc(x, y, fontPx * 0.32, 0, Math.PI * 2)
+      ctx.fillStyle = color
+      ctx.fill()
+      ctx.lineWidth = fontPx * 0.12
+      ctx.strokeStyle = colors.night
+      ctx.stroke()
+    }
+
+    // Readout box beside the line, flipped to the left near the right edge.
+    const showPace = input.speedDisplay === 'pace'
+    const rows: [string, string][] = [
+      [`${formatDuration(reading.t)}  ·  Lap ${reading.lap}`, colors.text],
+      [
+        showPace
+          ? `${formatPace(reading.speedMph, unit)} ${paceUnitLabel(unit)}`
+          : `${formatSpeed(reading.speedMph, unit)} ${speedUnitLabel(unit)}`,
+        colors.speed,
+      ],
+      [`${reading.inclinePct.toFixed(1)} % incline`, colors.grade],
+      [reading.hr == null ? '-- bpm' : `${Math.round(reading.hr)} bpm`, colors.heart],
+    ]
+    const boxFont = `600 ${Math.round(fontPx * 0.82)}px ${fontFamily}`
+    const titleFont = `700 ${Math.round(fontPx * 0.78)}px ${fontFamily}`
+    const lineH = Math.round(fontPx * 1.1)
+    const pad = Math.round(fontPx * 0.5)
+    ctx.font = boxFont
+    const boxW = maxWidth(ctx, rows.map((r) => r[0])) + pad * 2
+    const boxH = rows.length * lineH + pad * 1.4
+    const gapX = Math.round(fontPx * 0.6)
+    let bx = x + gapX
+    if (bx + boxW > plotRight) bx = x - gapX - boxW
+    const by = dataTop
+    ctx.fillStyle = colors.night
+    ctx.globalAlpha = 0.92
+    roundRect(ctx, bx, by, boxW, boxH, fontPx * 0.35)
+    ctx.fill()
+    ctx.globalAlpha = 1
+    ctx.strokeStyle = colors.lapLine
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'alphabetic'
+    rows.forEach(([text, color], i) => {
+      ctx.font = i === 0 ? titleFont : boxFont
+      ctx.fillStyle = i === 0 ? colors.mist : color
+      ctx.fillText(text, bx + pad, by + pad * 0.7 + (i + 1) * lineH - lineH * 0.25)
+    })
+  }
+
   return plot
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.arcTo(x + w, y, x + w, y + h, r)
+  ctx.arcTo(x + w, y + h, x, y + h, r)
+  ctx.arcTo(x, y + h, x, y, r)
+  ctx.arcTo(x, y, x + w, y, r)
+  ctx.closePath()
 }
 
 // ---- helpers ----------------------------------------------------------------

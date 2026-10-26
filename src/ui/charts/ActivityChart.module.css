@@ -107,3 +107,40 @@
   width: 100%;
   height: 100%;
 }
+
+/* "Graph returns in N" with a bar that shortens, on one line in the strip
+   above the plot (between the axis unit captions). */
+.countdown {
+  position: absolute;
+  top: 0;
+  left: 18%;
+  right: 18%;
+  height: 1.15em;
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
+  pointer-events: none;
+}
+
+.countdownText {
+  flex: none;
+  color: var(--chalk);
+  font-size: 0.78em;
+  font-weight: 600;
+}
+
+.countdownTrack {
+  flex: 1;
+  height: 0.28em;
+  border-radius: 999px;
+  background: rgb(143 166 189 / 0.25);
+  overflow: hidden;
+}
+
+.countdownFill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--chalk);
+  transition: width 200ms linear;
+}
