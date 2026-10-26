@@ -9,14 +9,14 @@ import { Sheet } from './Sheet'
  * grid. Tap a tile to choose what it shows; choosing a metric that's already
  * on screen swaps the two.
  */
-export function FieldGrid({ ctx }: { ctx: FieldContext }) {
+export function FieldGrid({ ctx, compact = false }: { ctx: FieldContext; compact?: boolean }) {
   const dataFields = useSettings((s) => s.dataFields)
   const setDataField = useSettings((s) => s.setDataField)
   const [picking, setPicking] = useState<number | null>(null)
 
   return (
     <>
-      <div className={styles.grid}>
+      <div className={styles.grid} data-compact={compact}>
         {dataFields.map((id, slot) => {
           const def = FIELDS_BY_ID[id] ?? FIELDS_BY_ID.elapsed
           const v = def.compute(ctx)

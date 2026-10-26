@@ -95,7 +95,7 @@ export function SplitsColumn({ record, unit }: { record: WorkoutRecord | null; u
 
       <ol className={styles.list}>
         {completed.length === 0 && (
-          <li className={styles.empty}>Tap Lap to split. Completed laps appear here.</li>
+          <li className={styles.empty}>Tap Take Split to split. Completed splits appear here.</li>
         )}
         {completed.map((r) => (
           <li
