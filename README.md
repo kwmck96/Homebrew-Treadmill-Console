@@ -38,6 +38,11 @@ Two workout views, switched with the tabs in the status bar:
   - Recording is unaffected: scroll position and cursor are display-only.
 
 **Both**
+- **Preset laps wait for the ramp.** When a preset tap splits a lap, the speed/incline change goes out immediately but the lap waits. An overlay shows the estimated speed and incline climbing to the new targets, then counts down 3-2-1 and starts the lap.
+  - **Do not start new lap** cancels the lap and keeps the new speed and incline.
+  - Wheel or step changes, or another preset tap, during the ramp re-target it (still one lap).
+  - Pausing, Stop belt, the lanyard or a dropped connection cancel it. The manual **Lap** button splits immediately and closes it.
+  - The estimate uses `treadmill/rampRates.ts` (currently 2 mph/s and 1 %/s), and the countdown runs in real seconds even with the simulator sped up.
 - Pause/resume, end-of-workout summary with lap splits
 - Every workout is saved on the device. An in-progress workout survives a crash or reload and comes back paused.
 - Miles/km, pace or speed as the big readout, start speed, decline limit
@@ -112,8 +117,8 @@ Internal units: speed in mph and incline in % (the treadmill's native control un
 
 | What | Where | Current value |
 |---|---|---|
-| Belt acceleration / deceleration | `treadmill/simulator.ts` | 1.0 / 1.5 mph per s (guesses) |
-| Incline motor speed | `treadmill/simulator.ts` | 0.5 % per s (guess) |
+| Belt speed change rate | `treadmill/rampRates.ts` | 2 mph per s (estimate: ~0.5 s per 1 mph); used by the pending-lap overlay and the simulator |
+| Incline motor speed | `treadmill/rampRates.ts` | 1 % per s (estimate: ~0.5 s per 0.5 %) |
 | Incline presets | Settings defaults | Flat 0 %, Road 1 %, Hill 4 % |
 | −3 % decline | Settings | Assumed per Precor spec; unconfirmed on this V1 |
 | Heart-rate profile | `heartrate/model.ts` | Rest 55, max 190, VO₂max 68 (simulator only) |

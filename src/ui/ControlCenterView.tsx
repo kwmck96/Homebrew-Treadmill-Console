@@ -8,6 +8,7 @@ import { FieldGrid } from './FieldGrid'
 import { Lane } from './Lane'
 import styles from './ControlCenterView.module.css'
 import { PauseBanner } from './PauseBanner'
+import { PendingLapOverlay } from './PendingLapOverlay'
 
 const SPEED_STEPS = [
   { label: '+1', delta: 1 },
@@ -99,15 +100,18 @@ export function ControlCenterView() {
 
       <section className={styles.center}>
         <PauseBanner />
-        <FieldGrid
-          ctx={{
-            record: workout,
-            actualSpeedMph: speed,
-            actualInclinePct: treadmill.actualInclinePct,
-            heartRateBpm,
-            unit,
-          }}
-        />
+        <div className={styles.fieldsArea}>
+          <FieldGrid
+            ctx={{
+              record: workout,
+              actualSpeedMph: speed,
+              actualInclinePct: treadmill.actualInclinePct,
+              heartRateBpm,
+              unit,
+            }}
+          />
+          <PendingLapOverlay />
+        </div>
         <div className={styles.controls}>
           <ControlBar />
         </div>

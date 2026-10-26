@@ -1,0 +1,133 @@
+/* Fills the host area (data fields or chart) but only the card takes
+   touches, and the host never contains controls. */
+.layer {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: var(--gap);
+  pointer-events: none;
+}
+
+.card {
+  pointer-events: auto;
+  width: min(30em, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.8em;
+  padding: 1.1em 1.3em 1.2em;
+  background: var(--night);
+  border: 2px solid var(--chalk);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 1.2em 3em rgb(0 0 0 / 0.55);
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1em;
+}
+
+.heading {
+  margin: 0;
+  font-size: 1.2em;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.note {
+  margin: 0.2em 0 0;
+  color: var(--mist);
+  font-size: 0.78em;
+}
+
+/* 3-2-1: each digit pops in as it changes. */
+.count {
+  flex: none;
+  color: var(--chalk);
+  font-size: 4em;
+  font-weight: 800;
+  line-height: 0.9;
+  animation: pop 300ms ease-out;
+}
+
+@keyframes pop {
+  from {
+    transform: scale(1.35);
+    opacity: 0.4;
+  }
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 4.5em 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 0.8em;
+  row-gap: 0.3em;
+  align-items: baseline;
+}
+
+.rowLabel {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.rowValues {
+  font-size: 1.15em;
+}
+
+.now {
+  color: var(--accent);
+  font-size: 1.5em;
+  font-weight: 700;
+}
+
+.arrow {
+  color: var(--mist);
+}
+
+.rowUnit {
+  color: var(--mist);
+  font-size: 0.85em;
+}
+
+.bar {
+  grid-column: 1 / -1;
+  height: 0.4em;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 250ms linear;
+}
+
+.countdownTrack {
+  height: 0.3em;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.countdownFill {
+  display: block;
+  height: 100%;
+  background: var(--chalk);
+  transition: width 250ms linear;
+}
+
+.cancel {
+  min-height: 3.2em;
+  border-radius: var(--radius-sm);
+  background: var(--lane-raised);
+  border: 2px solid var(--line);
+  font-weight: 700;
+}

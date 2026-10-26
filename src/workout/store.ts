@@ -11,6 +11,7 @@ import { clampIncline, clampSpeed, TRM885_LIMITS } from '../treadmill/limits'
 import { SimulatedTreadmill } from '../treadmill/simulator'
 import type { TreadmillDriver, TreadmillLimits, TreadmillState } from '../treadmill/types'
 import * as engine from './engine'
+import { advancePendingLap, type PendingLap, startPendingLap } from './pendingLap'
 import { archiveWorkout, clearActiveWorkout, loadActiveWorkout, saveActiveWorkout } from './persistence'
 import type { PauseReason, WorkoutRecord } from './types'
 
@@ -39,6 +40,11 @@ interface ConsoleState {
    * while it's running; turns freely (without moving the belt) otherwise.
    */
   dialMph: number
+  /**
+   * A preset-triggered lap waiting for the belt/deck to reach the new
+   * targets plus a 3 s countdown. Null when none is pending.
+   */
+  pendingLap: PendingLap | null
   /** The finished workout whose summary is on screen (M8). */
   summary: WorkoutRecord | null
 }
@@ -63,6 +69,8 @@ interface ConsoleActions {
   setDial: (mph: number) => void
   /** A preset was tapped: go to it, splitting a lap first if `lap` is set. */
   jumpToPreset: (kind: 'speed' | 'incline', presetId: string, lap: boolean) => void
+  /** "Do not start new lap": drop the pending lap, keep the new speed/incline. */
+  cancelPendingLap: () => void
 }
 
 // ---- driver selection ----------------------------------------------------
@@ -115,6 +123,8 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
   function pauseFor(reason: PauseReason) {
     const { workout } = get()
     if (!workout) return
+    // Any stop cancels a pending preset lap; the next lap starts on resume.
+    if (get().pendingLap) set({ pendingLap: null })
     const next = engine.pause(workout, reason, now())
     if (next !== workout) commit(next)
   }
@@ -144,7 +154,8 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
 
   function tick() {
     const t = performance.now()
-    const dt = (t - lastTick) * get().simTimeScale
+    const realDt = t - lastTick
+    const dt = realDt * get().simTimeScale
     lastTick = t
     const { treadmill } = get()
     // The simulated strap needs to know what the belt is doing.
@@ -157,6 +168,7 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
     const { workout } = get()
     if (!workout || workout.status === 'finished') {
       feedHr(dt)
+      if (get().pendingLap) set({ pendingLap: null })
       return
     }
 
@@ -183,6 +195,32 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
       next = engine.advance(next, reading, step, now())
     }
     set({ workout: next })
+
+    // Pending preset lap: follow the estimated ramp, then the countdown.
+    const pending = get().pendingLap
+    if (pending) {
+      const driving =
+        next.status === 'running' &&
+        treadmill.belt === 'running' &&
+        treadmill.connection === 'connected' &&
+        !treadmill.safetyStop
+      if (!driving) {
+        set({ pendingLap: null })
+      } else {
+        const r = advancePendingLap(
+          pending,
+          { speedMph: treadmill.targetSpeedMph, inclinePct: treadmill.targetInclinePct },
+          dt,
+          realDt,
+        )
+        set({ pendingLap: r.pending })
+        if (r.fireLap) {
+          next = engine.addLap(next, now(), 'preset')
+          commit(next)
+        }
+      }
+    }
+
     if (t - lastSave >= SAVE_EVERY_MS) {
       lastSave = t
       void saveActiveWorkout(next)
@@ -208,6 +246,7 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
       useSettings.getState().speedPresets.find((p) => p.id === 'recovery')?.value ??
       useSettings.getState().startSpeedMph,
     summary: null,
+    pendingLap: null,
 
     async init() {
       if (get().ready) return
@@ -263,19 +302,21 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
       if (!workout) return
       await driver.stop()
       const finished = engine.finish(workout, now())
-      set({ workout: null, summary: finished })
+      set({ workout: null, summary: finished, pendingLap: null })
       await archiveWorkout(finished)
     },
 
     async discardWorkout() {
       await driver.stop()
-      set({ workout: null })
+      set({ workout: null, pendingLap: null })
       await clearActiveWorkout()
     },
 
     lap(trigger = 'manual') {
       const { workout } = get()
       if (!workout || workout.status === 'finished') return
+      // A manual lap takes over from any pending preset lap.
+      if (trigger === 'manual' && get().pendingLap) set({ pendingLap: null })
       commit(engine.addLap(workout, now(), trigger))
     },
 
@@ -314,9 +355,32 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
       const { speedPresets, inclinePresets } = useSettings.getState()
       const preset = (kind === 'speed' ? speedPresets : inclinePresets).find((p) => p.id === presetId)
       if (!preset) return
-      if (lap) get().lap('preset')
-      if (kind === 'speed') get().setSpeed(preset.value)
-      else get().setIncline(preset.value)
+      const limits = effectiveLimits()
+      const value =
+        kind === 'speed' ? clampSpeed(preset.value, limits) : clampIncline(preset.value, limits)
+
+      // The lap waits for the ramp (pendingLap.ts). A tap while one is already
+      // pending re-targets it, even if this preset's lap-on-tap is off.
+      const { treadmill: t, pendingLap } = get()
+      if (lap || pendingLap) {
+        set({
+          pendingLap: startPendingLap(
+            pendingLap,
+            { speedMph: t.actualSpeedMph, inclinePct: t.actualInclinePct },
+            {
+              speedMph: kind === 'speed' ? value : t.targetSpeedMph,
+              inclinePct: kind === 'incline' ? value : t.targetInclinePct,
+            },
+            { speedMph: t.targetSpeedMph, inclinePct: t.targetInclinePct },
+          ),
+        })
+      }
+      if (kind === 'speed') get().setSpeed(value)
+      else get().setIncline(value)
+    },
+
+    cancelPendingLap() {
+      set({ pendingLap: null })
     },
 
     setSimTimeScale(scale) {

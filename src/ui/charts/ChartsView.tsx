@@ -13,6 +13,7 @@ import { useConsole } from '../../workout/store'
 import { ControlBar } from '../ControlBar'
 import { HoldButton } from '../HoldButton'
 import { PauseBanner } from '../PauseBanner'
+import { PendingLapOverlay } from '../PendingLapOverlay'
 import { ActivityChart } from './ActivityChart'
 import styles from './ChartsView.module.css'
 import { PresetHoldButton } from './PresetHoldButton'
@@ -90,6 +91,7 @@ export function ChartsView() {
         <div className={styles.chartColumn}>
           <PauseBanner />
           <ActivityChart />
+          <PendingLapOverlay />
         </div>
       </div>
 
