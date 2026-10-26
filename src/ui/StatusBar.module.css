@@ -33,7 +33,6 @@
 }
 
 .clock {
-  margin-left: auto;
   color: var(--mist);
   font-size: 1.1em;
 }
@@ -64,4 +63,37 @@
 
 .stop:disabled {
   opacity: 0.4;
+}
+
+.warp {
+  padding: 0.15em 0.6em;
+  border-radius: 999px;
+  background: var(--speed);
+  color: var(--speed-ink);
+  font-size: 0.85em;
+  font-weight: 700;
+}
+
+/* View switcher, centred in the bar's free space. */
+.views {
+  display: flex;
+  margin: 0 auto;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--lane);
+}
+
+.viewTab {
+  min-height: 2.6em;
+  padding: 0 1.3em;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--mist);
+  font-weight: 500;
+}
+
+.viewTab[aria-selected='true'] {
+  background: var(--chalk);
+  color: var(--night);
+  font-weight: 700;
 }

@@ -1,0 +1,129 @@
+.column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--lane);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+/* ---- current lap ---- */
+
+.current {
+  padding: calc(var(--gap) * 1.2) calc(var(--gap) * 1.4);
+  border-bottom: 2px solid var(--line);
+}
+
+.currentTitle {
+  color: var(--mist);
+  font-weight: 600;
+}
+
+.currentTime {
+  font-size: 2.6em;
+  font-weight: 700;
+  line-height: 1;
+  margin: 0.1em 0 0.25em;
+}
+
+.currentStats {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  justify-content: space-between;
+  gap: 0.6em;
+  margin: 0;
+}
+
+.currentStats dt {
+  color: var(--mist);
+  font-size: 0.8em;
+}
+
+.currentStats dd {
+  margin: 0;
+  font-size: 1.25em;
+  font-weight: 650;
+}
+
+.currentStats small {
+  margin-left: 0.2em;
+  color: var(--mist);
+  font-size: 0.6em;
+  font-weight: 500;
+}
+
+/* ---- completed laps ---- */
+
+.tableHead,
+.row {
+  display: grid;
+  grid-template-columns: 1.6em minmax(0, 1fr) 3.4em 2.9em 2.2em;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0 calc(var(--gap) * 1.4);
+}
+
+.tableHead {
+  padding-top: 0.6em;
+  padding-bottom: 0.3em;
+  color: var(--mist);
+  font-size: 0.8em;
+}
+
+.tableHead > span:nth-child(n + 3),
+.row > span:nth-child(n + 3) {
+  text-align: right;
+}
+
+.list {
+  flex: 1;
+  margin: 0;
+  padding: 0 0 var(--gap);
+  list-style: none;
+  overflow-y: auto;
+}
+
+.row {
+  min-height: 2.5em;
+  font-size: 0.95em;
+}
+
+.row + .row {
+  border-top: 1px solid var(--line);
+}
+
+.lapNo {
+  color: var(--mist);
+}
+
+/* Pace text sits on top of a bar whose length shows relative speed. */
+.pace {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 1.8em;
+}
+
+.bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  /* Always wide enough for the pace text; the rest stretches with speed. */
+  width: calc(3.3em + (100% - 3.3em) * var(--bar));
+  border-radius: 4px;
+  background: var(--speed);
+}
+
+.paceText {
+  position: relative;
+  padding-left: 0.45em;
+  color: var(--speed-ink);
+  font-weight: 700;
+}
+
+.empty {
+  padding: 0.8em calc(var(--gap) * 1.4);
+  color: var(--mist);
+  font-size: 0.9em;
+  line-height: 1.35;
+}

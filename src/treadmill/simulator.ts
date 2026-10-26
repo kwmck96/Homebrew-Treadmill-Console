@@ -1,4 +1,5 @@
 import { clampIncline, clampSpeed, quantize, TRM885_LIMITS } from './limits'
+import { RAMP_RATES } from './rampRates'
 import type {
   BeltState,
   ConnectionState,
@@ -11,10 +12,9 @@ import type {
 /**
  * Ramp rates for the simulated belt and incline motor.
  *
- * PLACEHOLDERS: these are guesses, not measurements. Replace them with values
- * timed on the real TRM 885 (e.g. stopwatch the belt from 1 to 10 mph, and the
- * deck from 0 % to 15 %). They only affect how the simulator behaves; the real
- * driver will report actual values from the hardware.
+ * Estimates, not measurements: they come from rampRates.ts, which is the
+ * one place to update once the real TRM 885 has been timed (e.g. stopwatch
+ * the belt from 1 to 10 mph, and the deck from 0 % to 15 %).
  */
 export interface SimulatorRates {
   accelMphPerSec: number
@@ -25,10 +25,12 @@ export interface SimulatorRates {
 }
 
 export const DEFAULT_SIM_RATES: SimulatorRates = {
-  accelMphPerSec: 1.0, // placeholder
-  decelMphPerSec: 1.5, // placeholder
-  safetyDecelMphPerSec: 4.0, // placeholder
-  inclinePctPerSec: 0.5, // placeholder (≈30 s from 0 % to 15 %)
+  // Shared estimates (see rampRates.ts) so the simulator matches the
+  // pending-lap overlay. Deceleration assumed equal to acceleration.
+  accelMphPerSec: RAMP_RATES.speedMphPerSec,
+  decelMphPerSec: RAMP_RATES.speedMphPerSec,
+  safetyDecelMphPerSec: 4.0, // placeholder; set by the lower board in reality
+  inclinePctPerSec: RAMP_RATES.inclinePctPerSec,
 }
 
 export interface SimulatorOptions {
@@ -49,6 +51,8 @@ export class SimulatedTreadmill implements TreadmillDriver {
   readonly name = 'Simulator'
   readonly isSimulated = true
   limits: TreadmillLimits
+  /** Run the physics faster than real time (testing aid). */
+  timeScale = 1
 
   private rates: SimulatorRates
   private listeners = new Set<TreadmillListener>()
@@ -214,7 +218,7 @@ export class SimulatedTreadmill implements TreadmillDriver {
     if (!this.autoTick || this.timer) return
     this.timer = setInterval(() => {
       const t = this.now()
-      const dt = t - this.lastTick
+      const dt = (t - this.lastTick) * this.timeScale
       this.lastTick = t
       this.advance(dt)
     }, this.tickMs)

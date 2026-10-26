@@ -9,6 +9,9 @@ export interface Preset {
   value: number
 }
 
+export type ConsoleView = 'control' | 'charts'
+export type ChartRange = '5' | '15' | 'full'
+
 export interface Settings {
   distanceUnit: DistanceUnit
   /** Whether the big readout shows pace (min/mi) or speed (mph). */
@@ -21,6 +24,16 @@ export interface Settings {
   inclinePresets: Preset[]
   /** Which metric shows in each data-field slot, in order. */
   dataFields: FieldId[]
+  /** Which workout view is on screen. */
+  view: ConsoleView
+  /** Time range shown on the Charts view's graph. */
+  chartRange: ChartRange
+  /** Tapping Run or Recover on the Charts view also splits a lap. */
+  lapOnPresetTap: boolean
+  /** Control Center: tapping a speed preset also splits a lap. */
+  lapOnSpeedPresetTap: boolean
+  /** Control Center: tapping an incline preset also splits a lap. */
+  lapOnInclinePresetTap: boolean
 }
 
 interface SettingsActions {
@@ -47,6 +60,11 @@ export const DEFAULT_SETTINGS: Settings = {
     { id: 'hill', label: 'Hill', value: 4 },
   ],
   dataFields: ['elapsed', 'distance', 'lapTime', 'lapDistance', 'avgPace', 'elevGain'],
+  view: 'control',
+  chartRange: '15',
+  lapOnPresetTap: true,
+  lapOnSpeedPresetTap: true,
+  lapOnInclinePresetTap: true,
 }
 
 export const useSettings = create<Settings & SettingsActions>()(
@@ -65,7 +83,9 @@ export const useSettings = create<Settings & SettingsActions>()(
           dataFields[slot] = field
           return { dataFields }
         }),
-      resetToDefaults: () => set(DEFAULT_SETTINGS),
+      // Keep the current view and chart range; "reset" is about workout settings.
+      resetToDefaults: () =>
+        set((s) => ({ ...DEFAULT_SETTINGS, view: s.view, chartRange: s.chartRange })),
     }),
     {
       name: 'htc-settings',

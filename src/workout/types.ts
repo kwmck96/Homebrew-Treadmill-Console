@@ -12,7 +12,7 @@ export type PauseReason = 'user' | 'safetyStop' | 'connectionLost' | 'recovered'
 export interface Lap {
   /** 1-based lap number. */
   index: number
-  trigger: 'start' | 'manual' | 'auto' | 'step'
+  trigger: 'start' | 'manual' | 'auto' | 'step' | 'preset'
   startElapsedMs: number
   startDistanceM: number
   startElevGainM: number
@@ -31,6 +31,8 @@ export interface Sample {
   speedMph: number
   inclinePct: number
   distanceM: number
+  /** Heart rate in bpm, when a strap was connected. */
+  hr?: number
 }
 
 /**

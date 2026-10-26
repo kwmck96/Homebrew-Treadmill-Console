@@ -1,8 +1,9 @@
+/* Fills whatever box the parent view gives it. */
 .bar {
+  flex: 1;
   display: flex;
   gap: var(--gap);
-  height: 22%;
-  min-height: 5.5em;
+  min-width: 0;
 }
 
 .primary,

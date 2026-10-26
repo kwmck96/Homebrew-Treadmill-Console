@@ -1,0 +1,146 @@
+.chart {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: var(--gap) var(--gap) 0;
+  background: var(--lane);
+  border-radius: var(--radius-lg);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--gap) * 1.5);
+  padding: 0 0.2em var(--gap) 0.4em;
+}
+
+.legend {
+  display: flex;
+  align-items: baseline;
+  gap: 1.4em;
+  margin-right: auto;
+  color: var(--mist);
+  font-size: 0.95em;
+}
+
+.key {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3em;
+}
+
+/* Coloured bar before each key ties it to its line on the chart. */
+.key::before {
+  content: '';
+  align-self: center;
+  width: 1.1em;
+  height: 0.28em;
+  border-radius: 2px;
+  background: var(--series);
+}
+
+.key[data-series='speed'] {
+  --series: var(--speed);
+}
+
+.key[data-series='grade'] {
+  --series: var(--grade);
+}
+
+.key[data-series='heart'] {
+  --series: var(--heart);
+}
+
+.keyValue {
+  color: var(--series);
+  font-size: 1.35em;
+  font-weight: 700;
+}
+
+.live {
+  min-height: 2.6em;
+  padding: 0 1.1em;
+  border-radius: 999px;
+  background: var(--chalk);
+  color: var(--night);
+  font-weight: 700;
+}
+
+.ranges {
+  display: flex;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--night);
+}
+
+.range {
+  min-height: 2.5em;
+  min-width: 4.6em;
+  padding: 0 0.9em;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--mist);
+}
+
+.range[aria-checked='true'] {
+  background: var(--chalk);
+  color: var(--night);
+  font-weight: 700;
+}
+
+.canvasWrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  /* Horizontal drags pan the chart instead of scrolling the page. */
+  touch-action: none;
+}
+
+.canvasWrap[data-pannable='true'] {
+  cursor: grab;
+}
+
+.canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* "Graph returns in N" with a bar that shortens, on one line in the strip
+   above the plot (between the axis unit captions). */
+.countdown {
+  position: absolute;
+  top: 0;
+  left: 18%;
+  right: 18%;
+  height: 1.15em;
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
+  pointer-events: none;
+}
+
+.countdownText {
+  flex: none;
+  color: var(--chalk);
+  font-size: 0.78em;
+  font-weight: 600;
+}
+
+.countdownTrack {
+  flex: 1;
+  height: 0.28em;
+  border-radius: 999px;
+  background: rgb(143 166 189 / 0.25);
+  overflow: hidden;
+}
+
+.countdownFill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--chalk);
+  transition: width 200ms linear;
+}

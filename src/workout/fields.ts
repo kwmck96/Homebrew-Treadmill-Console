@@ -15,13 +15,15 @@ import {
   paceUnitLabel,
   speedUnitLabel,
 } from '../lib/units'
-import { currentLap, lapTotals } from './engine'
+import { averageHr, currentLap, lapAverageHr, lapTotals } from './engine'
 import type { WorkoutRecord } from './types'
 
 export interface FieldContext {
   record: WorkoutRecord | null
   actualSpeedMph: number
   actualInclinePct: number
+  /** Latest heart rate, or null with no strap connected. */
+  heartRateBpm: number | null
   unit: DistanceUnit
 }
 
@@ -145,7 +147,29 @@ const FIELD_DEFS = [
       unit: elevationUnitLabel(unit),
     }),
   },
+  {
+    id: 'heartRate',
+    label: 'Heart Rate',
+    compute: ({ heartRateBpm }) => ({ value: formatBpm(heartRateBpm), unit: 'bpm' }),
+  },
+  {
+    id: 'avgHr',
+    label: 'Avg HR',
+    compute: ({ record }) => ({ value: formatBpm(record ? averageHr(record) : null), unit: 'bpm' }),
+  },
+  {
+    id: 'lapAvgHr',
+    label: 'Lap Avg HR',
+    compute: ({ record }) => ({
+      value: formatBpm(record ? lapAverageHr(record, currentLap(record)) : null),
+      unit: 'bpm',
+    }),
+  },
 ] as const satisfies readonly FieldDef[]
+
+export function formatBpm(bpm: number | null): string {
+  return bpm == null ? '--' : String(Math.round(bpm))
+}
 
 export type FieldId = (typeof FIELD_DEFS)[number]['id']
 

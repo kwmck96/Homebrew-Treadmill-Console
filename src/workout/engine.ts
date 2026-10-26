@@ -20,6 +20,8 @@ export interface TreadmillReading {
   actualInclinePct: number
   /** Only integrate distance while we can actually see the treadmill. */
   connected: boolean
+  /** Latest heart rate, or null with no strap. */
+  heartRateBpm?: number | null
 }
 
 export function newWorkoutId(nowEpoch: number): string {
@@ -84,6 +86,7 @@ export function advance(
           speedMph: round(reading.actualSpeedMph, 2),
           inclinePct: round(reading.actualInclinePct, 2),
           distanceM: round(distanceM, 2),
+          ...(reading.heartRateBpm != null ? { hr: Math.round(reading.heartRateBpm) } : {}),
         },
       ]
     }
@@ -154,6 +157,34 @@ export function lapTotals(record: WorkoutRecord, lap: Lap) {
     elevGainM: (lap.endElevGainM ?? record.elevGainM) - lap.startElevGainM,
     elevLossM: (lap.endElevLossM ?? record.elevLossM) - lap.startElevLossM,
   }
+}
+
+/** Lap end in moving time; the open lap ends "now". */
+export function lapEndMs(record: WorkoutRecord, lap: Lap): number {
+  return lap.endElapsedMs ?? record.elapsedMs
+}
+
+/**
+ * Average heart rate over a span of moving time, from the 1 Hz samples.
+ * Returns null if no sample in the span has a heart rate.
+ */
+export function averageHr(record: WorkoutRecord, fromMs = 0, toMs = Infinity): number | null {
+  let sum = 0
+  let n = 0
+  // Samples are in time order; each one covers the second ending at `t`.
+  for (const s of record.samples) {
+    if (s.t <= fromMs) continue
+    if (s.t > toMs) break
+    if (s.hr != null) {
+      sum += s.hr
+      n++
+    }
+  }
+  return n > 0 ? sum / n : null
+}
+
+export function lapAverageHr(record: WorkoutRecord, lap: Lap): number | null {
+  return averageHr(record, lap.startElapsedMs, lapEndMs(record, lap))
 }
 
 // ---- helpers ------------------------------------------------------------

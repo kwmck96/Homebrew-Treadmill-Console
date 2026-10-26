@@ -1,0 +1,144 @@
+.view {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: var(--gap);
+  min-height: 0;
+}
+
+/* ---- top metrics ---- */
+
+.metrics {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr 1fr 1fr;
+  gap: var(--gap);
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0.5em 1em 0.55em;
+  background: var(--lane);
+  border-radius: var(--radius-sm);
+}
+
+/* Speed and incline tiles carry their lane colour along the top edge. */
+.metric[data-accent='speed'],
+.metric[data-accent='grade'] {
+  border-top: 0.3em solid var(--accent);
+}
+
+.metricLabel {
+  color: var(--mist);
+  font-size: 0.9em;
+}
+
+.metric[data-accent='speed'] .metricLabel,
+.metric[data-accent='grade'] .metricLabel {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.metricValueRow {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25em;
+}
+
+.metricValue {
+  font-size: min(8vh, 4vw);
+  font-weight: 700;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+.metricUnit {
+  color: var(--mist);
+}
+
+.metricNote {
+  align-self: flex-start;
+  margin-top: 0.15em;
+  padding: 0 0.5em;
+  margin-left: -0.5em;
+  border-radius: 999px;
+  color: var(--mist);
+  font-size: 0.9em;
+}
+
+.metricNote[data-highlight='true'] {
+  background: var(--accent);
+  color: var(--night);
+  font-weight: 600;
+}
+
+/* ---- middle: splits + chart ---- */
+
+.middle {
+  display: grid;
+  grid-template-columns: minmax(18em, 0.37fr) minmax(0, 1fr);
+  gap: var(--gap);
+  min-height: 0;
+}
+
+.chartColumn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  min-width: 0;
+  min-height: 0;
+}
+
+.chartColumn > section {
+  flex: 1;
+}
+
+/* ---- bottom controls ---- */
+
+.controls {
+  display: grid;
+  grid-template-columns: 2.1fr 1.1fr 0.8fr;
+  gap: calc(var(--gap) * 2);
+  height: 17vh;
+  min-height: 5.6em;
+}
+
+/* Recover | wheel | Run */
+.speedControls {
+  display: grid;
+  grid-template-columns: minmax(5.5em, 0.55fr) minmax(0, 1.3fr) minmax(5.5em, 0.55fr);
+  gap: var(--gap);
+  min-width: 0;
+}
+
+.center {
+  display: flex;
+  min-width: 0;
+}
+
+/* The center ControlBar is shorter here than on Control Center. */
+.center button {
+  font-size: 1.35em;
+}
+
+.steps {
+  display: flex;
+  gap: var(--gap);
+}
+
+.step {
+  flex: 1;
+  border-radius: var(--radius-sm);
+  background: var(--lane-raised);
+  border: 2px solid var(--line);
+  color: var(--accent);
+  font-size: 1.7em;
+  font-weight: 700;
+}
+
+.step:active:not(:disabled) {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}

@@ -1,0 +1,124 @@
+/* A recessed tape of tick marks sliding under a fixed amber marker. */
+.wheel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--night);
+  border: 2px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  cursor: grab;
+  /* Horizontal drags turn the wheel instead of scrolling anything. */
+  touch-action: none;
+}
+
+.wheel[data-dragging='true'] {
+  cursor: grabbing;
+  border-color: var(--speed);
+}
+
+.wheel:focus-visible {
+  outline: 3px solid var(--chalk);
+  outline-offset: 2px;
+}
+
+.readout {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.3em;
+  padding-top: 0.35em;
+  line-height: 1;
+}
+
+.value {
+  color: var(--speed);
+  font-size: 2em;
+  font-weight: 700;
+}
+
+.wheel[data-driving='false'] .value {
+  color: var(--chalk);
+}
+
+.unit {
+  color: var(--mist);
+}
+
+.pace {
+  margin-left: 0.6em;
+  color: var(--mist);
+  font-size: 0.9em;
+}
+
+.hint {
+  position: absolute;
+  top: 0.45em;
+  right: 0.7em;
+  color: var(--mist);
+  font-size: 0.72em;
+}
+
+.window {
+  position: relative;
+  flex: 1;
+  min-height: 2.6em;
+  /* Fade the tape out toward both ends so it reads as a curved wheel. */
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 22%, #000 78%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 22%, #000 78%, transparent);
+}
+
+.tape {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(var(--offset));
+  transition: transform 160ms ease-out;
+  /* Ticks: whole units tall, halves medium, tenths short. Each line sits at
+     the left edge of its repeat tile, i.e. exactly on its value. */
+  background-image:
+    linear-gradient(to right, var(--chalk) 2px, transparent 2px),
+    linear-gradient(to right, var(--mist) 2px, transparent 2px),
+    linear-gradient(to right, var(--line) 1px, transparent 1px);
+  background-size:
+    calc(var(--tenth) * 10) 55%,
+    calc(var(--tenth) * 5) 38%,
+    var(--tenth) 24%;
+  background-position: -1px 100%, -1px 100%, 0 100%;
+  background-repeat: repeat-x;
+}
+
+.wheel[data-dragging='true'] .tape {
+  transition: none;
+}
+
+.label {
+  position: absolute;
+  top: 0.1em;
+  transform: translateX(-50%);
+  color: var(--mist);
+  font-size: 0.85em;
+}
+
+/* Starts below the number row so it never covers the value it points at. */
+.marker {
+  position: absolute;
+  top: 1.2em;
+  bottom: 0;
+  left: 50%;
+  width: 3px;
+  margin-left: -1.5px;
+  background: var(--speed);
+}
+
+.marker::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 0.4em solid transparent;
+  border-top-color: var(--speed);
+}

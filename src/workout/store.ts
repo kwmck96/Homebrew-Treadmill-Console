@@ -4,11 +4,14 @@
  * it with `useConsole(selector)`; the timer loop lives here, not in React.
  */
 import { create } from 'zustand'
+import { SimulatedHeartRate } from '../heartrate/simulator'
+import type { HeartRateSource, HeartRateState } from '../heartrate/types'
 import { useSettings } from '../settings/store'
 import { clampIncline, clampSpeed, TRM885_LIMITS } from '../treadmill/limits'
 import { SimulatedTreadmill } from '../treadmill/simulator'
 import type { TreadmillDriver, TreadmillLimits, TreadmillState } from '../treadmill/types'
 import * as engine from './engine'
+import { advancePendingLap, type PendingLap, startPendingLap } from './pendingLap'
 import { archiveWorkout, clearActiveWorkout, loadActiveWorkout, saveActiveWorkout } from './persistence'
 import type { PauseReason, WorkoutRecord } from './types'
 
@@ -16,11 +19,32 @@ import type { PauseReason, WorkoutRecord } from './types'
 const TICK_MS = 250
 /** How often the in-progress workout is written to storage (M9). */
 const SAVE_EVERY_MS = 3000
+/**
+ * Largest slice of simulated time integrated in one step. Keeps the 1 Hz
+ * samples intact when the simulator runs faster than real time.
+ */
+const MAX_SUBSTEP_MS = 1000
+
+/** Simulator-only: how many times faster than real time the simulation runs. */
+export type SimTimeScale = 1 | 10 | 30
 
 interface ConsoleState {
   ready: boolean
   treadmill: TreadmillState
+  heartRate: HeartRateState
+  /** 1 on real hardware. Above 1 only while testing with the simulator. */
+  simTimeScale: SimTimeScale
   workout: WorkoutRecord | null
+  /**
+   * The speed shown on the Charts view's wheel. Follows the belt's target
+   * while it's running; turns freely (without moving the belt) otherwise.
+   */
+  dialMph: number
+  /**
+   * A preset-triggered lap waiting for the belt/deck to reach the new
+   * targets plus a 3 s countdown. Null when none is pending.
+   */
+  pendingLap: PendingLap | null
   /** The finished workout whose summary is on screen (M8). */
   summary: WorkoutRecord | null
 }
@@ -34,21 +58,34 @@ interface ConsoleActions {
   stopNow: () => Promise<void>
   endWorkout: () => Promise<void>
   discardWorkout: () => Promise<void>
-  lap: () => void
+  lap: (trigger?: 'manual' | 'preset') => void
   dismissSummary: () => void
   setSpeed: (mph: number) => void
   nudgeSpeed: (deltaMph: number) => void
   setIncline: (pct: number) => void
   nudgeIncline: (deltaPct: number) => void
+  setSimTimeScale: (scale: SimTimeScale) => void
+  /** Wheel turned: drives the belt while running, otherwise just moves the dial. */
+  setDial: (mph: number) => void
+  /** A preset was tapped: go to it, splitting a lap first if `lap` is set. */
+  jumpToPreset: (kind: 'speed' | 'incline', presetId: string, lap: boolean) => void
+  /** "Do not start new lap": drop the pending lap, keep the new speed/incline. */
+  cancelPendingLap: () => void
 }
 
 // ---- driver selection ----------------------------------------------------
 // The only place that decides which hardware backend to use. When the ESP32
 // bridge exists, its driver gets chosen here (e.g. from a setting).
 const driver: TreadmillDriver = new SimulatedTreadmill()
+// Same for heart rate: a Bluetooth strap source replaces this later (H1).
+const heartRateSource: HeartRateSource = new SimulatedHeartRate()
 
 export function getDriver(): TreadmillDriver {
   return driver
+}
+
+export function getHeartRateSource(): HeartRateSource {
+  return heartRateSource
 }
 
 export function effectiveLimits(): TreadmillLimits {
@@ -86,6 +123,8 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
   function pauseFor(reason: PauseReason) {
     const { workout } = get()
     if (!workout) return
+    // Any stop cancels a pending preset lap; the next lap starts on resume.
+    if (get().pendingLap) set({ pendingLap: null })
     const next = engine.pause(workout, reason, now())
     if (next !== workout) commit(next)
   }
@@ -93,6 +132,15 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
   function onTreadmill(state: TreadmillState) {
     set({ treadmill: state })
     if (state.belt === 'running') awaitingBeltStart = false
+    // Keep the wheel on whatever the belt was last told to do.
+    if (
+      state.belt === 'running' &&
+      state.connection === 'connected' &&
+      state.targetSpeedMph > 0 &&
+      state.targetSpeedMph !== get().dialMph
+    ) {
+      set({ dialMph: state.targetSpeedMph })
+    }
 
     const { workout } = get()
     if (!workout || workout.status !== 'running') return
@@ -106,10 +154,23 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
 
   function tick() {
     const t = performance.now()
-    const dt = t - lastTick
+    const realDt = t - lastTick
+    const dt = realDt * get().simTimeScale
     lastTick = t
-    const { workout, treadmill } = get()
-    if (!workout || workout.status === 'finished') return
+    const { treadmill } = get()
+    // The simulated strap needs to know what the belt is doing.
+    const feedHr = (ms: number) => {
+      if (heartRateSource instanceof SimulatedHeartRate) {
+        heartRateSource.feed(treadmill.actualSpeedMph, treadmill.actualInclinePct, ms)
+      }
+    }
+
+    const { workout } = get()
+    if (!workout || workout.status === 'finished') {
+      feedHr(dt)
+      if (get().pendingLap) set({ pendingLap: null })
+      return
+    }
 
     if (awaitingBeltStart && t - awaitingSince > BELT_START_TIMEOUT_MS) {
       // The belt never started (command lost, hardware refused). Don't let the
@@ -121,17 +182,45 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
       }
     }
 
-    const next = engine.advance(
-      workout,
-      {
+    let next = workout
+    for (let left = dt; left > 0; left -= MAX_SUBSTEP_MS) {
+      const step = Math.min(left, MAX_SUBSTEP_MS)
+      feedHr(step)
+      const reading = {
         actualSpeedMph: treadmill.actualSpeedMph,
         actualInclinePct: treadmill.actualInclinePct,
         connected: treadmill.connection === 'connected',
-      },
-      dt,
-      now(),
-    )
+        heartRateBpm: get().heartRate.bpm,
+      }
+      next = engine.advance(next, reading, step, now())
+    }
     set({ workout: next })
+
+    // Pending preset lap: follow the estimated ramp, then the countdown.
+    const pending = get().pendingLap
+    if (pending) {
+      const driving =
+        next.status === 'running' &&
+        treadmill.belt === 'running' &&
+        treadmill.connection === 'connected' &&
+        !treadmill.safetyStop
+      if (!driving) {
+        set({ pendingLap: null })
+      } else {
+        const r = advancePendingLap(
+          pending,
+          { speedMph: treadmill.targetSpeedMph, inclinePct: treadmill.targetInclinePct },
+          dt,
+          realDt,
+        )
+        set({ pendingLap: r.pending })
+        if (r.fireLap) {
+          next = engine.addLap(next, now(), 'preset')
+          commit(next)
+        }
+      }
+    }
+
     if (t - lastSave >= SAVE_EVERY_MS) {
       lastSave = t
       void saveActiveWorkout(next)
@@ -150,12 +239,19 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
   return {
     ready: false,
     treadmill: driver.getState(),
+    heartRate: heartRateSource.getState(),
+    simTimeScale: 1,
     workout: null,
+    dialMph:
+      useSettings.getState().speedPresets.find((p) => p.id === 'recovery')?.value ??
+      useSettings.getState().startSpeedMph,
     summary: null,
+    pendingLap: null,
 
     async init() {
       if (get().ready) return
       driver.subscribe(onTreadmill)
+      heartRateSource.subscribe((heartRate) => set({ heartRate }))
 
       // Crash recovery (M9): restore an in-progress workout as paused. The
       // belt is never restarted automatically (S4).
@@ -168,7 +264,7 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
       lastSave = lastTick
       tickTimer ??= setInterval(tick, TICK_MS)
       set({ ready: true })
-      await driver.connect()
+      await Promise.all([driver.connect(), heartRateSource.connect()])
     },
 
     async startWorkout() {
@@ -206,20 +302,22 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
       if (!workout) return
       await driver.stop()
       const finished = engine.finish(workout, now())
-      set({ workout: null, summary: finished })
+      set({ workout: null, summary: finished, pendingLap: null })
       await archiveWorkout(finished)
     },
 
     async discardWorkout() {
       await driver.stop()
-      set({ workout: null })
+      set({ workout: null, pendingLap: null })
       await clearActiveWorkout()
     },
 
-    lap() {
+    lap(trigger = 'manual') {
       const { workout } = get()
       if (!workout || workout.status === 'finished') return
-      commit(engine.addLap(workout, now()))
+      // A manual lap takes over from any pending preset lap.
+      if (trigger === 'manual' && get().pendingLap) set({ pendingLap: null })
+      commit(engine.addLap(workout, now(), trigger))
     },
 
     dismissSummary() {
@@ -244,6 +342,51 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
 
     nudgeIncline(delta) {
       get().setIncline(get().treadmill.targetInclinePct + delta)
+    },
+
+    setDial(mph) {
+      const value = clampSpeed(mph, effectiveLimits())
+      set({ dialMph: value })
+      if (canDrive()) void driver.setSpeed(value)
+    },
+
+    jumpToPreset(kind, presetId, lap) {
+      if (!canDrive()) return
+      const { speedPresets, inclinePresets } = useSettings.getState()
+      const preset = (kind === 'speed' ? speedPresets : inclinePresets).find((p) => p.id === presetId)
+      if (!preset) return
+      const limits = effectiveLimits()
+      const value =
+        kind === 'speed' ? clampSpeed(preset.value, limits) : clampIncline(preset.value, limits)
+
+      // The lap waits for the ramp (pendingLap.ts). A tap while one is already
+      // pending re-targets it, even if this preset's lap-on-tap is off.
+      const { treadmill: t, pendingLap } = get()
+      if (lap || pendingLap) {
+        set({
+          pendingLap: startPendingLap(
+            pendingLap,
+            { speedMph: t.actualSpeedMph, inclinePct: t.actualInclinePct },
+            {
+              speedMph: kind === 'speed' ? value : t.targetSpeedMph,
+              inclinePct: kind === 'incline' ? value : t.targetInclinePct,
+            },
+            { speedMph: t.targetSpeedMph, inclinePct: t.targetInclinePct },
+          ),
+        })
+      }
+      if (kind === 'speed') get().setSpeed(value)
+      else get().setIncline(value)
+    },
+
+    cancelPendingLap() {
+      set({ pendingLap: null })
+    },
+
+    setSimTimeScale(scale) {
+      if (!(driver instanceof SimulatedTreadmill)) return
+      driver.timeScale = scale
+      set({ simTimeScale: scale })
     },
   }
 })
