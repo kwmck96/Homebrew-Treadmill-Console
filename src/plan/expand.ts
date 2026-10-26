@@ -235,16 +235,24 @@ function expandBlock(b: Block, blockIndex: number, hr: HrProfile): Draft[] {
 
 export function expandPlan(plan: WorkoutPlan, hr: HrProfile): PlannedStep[] {
   const drafts = plan.blocks.flatMap((b, i) => expandBlock(b, i, hr))
-  // Off-treadmill rest runs the belt at the next step's speed and incline so
-  // the next rep starts at speed. With nothing after it, hold the previous.
-  for (let i = 0; i < drafts.length; i++) {
-    const d = drafts[i]
+  return linkOffRests(drafts.map((d, index) => ({ ...d, index })))
+}
+
+/**
+ * Off-treadmill rest runs the belt at the next step's speed and incline so
+ * the next rep starts at speed. With nothing after it, hold the previous.
+ * Returns a new array; call again after editing steps during a run.
+ */
+export function linkOffRests(steps: PlannedStep[]): PlannedStep[] {
+  const out = steps.map((s) => ({ ...s }))
+  for (let i = 0; i < out.length; i++) {
+    const d = out[i]
     if (!d.restOff) continue
-    const next = drafts.slice(i + 1).find((x) => !x.restOff)
-    const prev = drafts.slice(0, i).reverse().find((x) => !x.restOff)
+    const next = out.slice(i + 1).find((x) => !x.restOff)
+    const prev = out.slice(0, i).reverse().find((x) => !x.restOff)
     const source = next ?? prev
     d.speedMph = source?.speedMph ?? 2.5
     d.inclinePct = source?.inclinePct ?? 0
   }
-  return drafts.map((d, index) => ({ ...d, index }))
+  return out
 }

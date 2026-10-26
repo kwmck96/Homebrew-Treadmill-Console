@@ -5,12 +5,13 @@ import { ChartsView } from './charts/ChartsView'
 import { ControlCenterView } from './ControlCenterView'
 import { StatusBar } from './StatusBar'
 import { useWakeLock } from './useWakeLock'
+import { StartCountdown } from './workout/WorkoutMode'
 import styles from './WorkoutScreen.module.css'
 
 /** Status bar plus whichever workout view is selected. */
 export function WorkoutScreen() {
   const view = useSettings((s) => s.view)
-  const workoutActive = useConsole((s) => s.workout !== null)
+  const workoutActive = useConsole((s) => s.workout !== null || s.startCountdown !== null)
 
   // Keep the screen on for the whole workout, paused included (M1).
   useWakeLock(workoutActive)
@@ -19,6 +20,7 @@ export function WorkoutScreen() {
     <div className={styles.screen}>
       <StatusBar />
       {view === 'charts' ? <ChartsView /> : view === 'builder' ? <BuilderView /> : <ControlCenterView />}
+      <StartCountdown />
     </div>
   )
 }

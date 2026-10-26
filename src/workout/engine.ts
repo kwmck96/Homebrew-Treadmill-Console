@@ -22,6 +22,11 @@ export interface TreadmillReading {
   connected: boolean
   /** Latest heart rate, or null with no strap. */
   heartRateBpm?: number | null
+  /**
+   * False during off-treadmill rest: the belt runs but nobody is on it, so
+   * time runs and no distance or elevation is added.
+   */
+  creditDistance?: boolean
 }
 
 export function newWorkoutId(nowEpoch: number): string {
@@ -63,7 +68,7 @@ export function advance(
 
   let { distanceM, elevGainM, elevLossM, elapsedMs, samples } = record
 
-  if (reading.connected && reading.actualSpeedMph > 0) {
+  if (reading.connected && reading.actualSpeedMph > 0 && reading.creditDistance !== false) {
     const meters = mphToMetersPerSec(reading.actualSpeedMph) * (dt / 1000)
     distanceM += meters
     // Incline % is grade (rise/run). Belt distance is measured along the deck

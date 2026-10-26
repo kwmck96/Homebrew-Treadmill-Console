@@ -106,6 +106,7 @@
 
 /* Recover | wheel | Run */
 .speedControls {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(5.5em, 0.55fr) minmax(0, 1.3fr) minmax(5.5em, 0.55fr);
   gap: var(--gap);
@@ -141,4 +142,46 @@
   background: var(--accent);
   color: var(--accent-ink);
   border-color: var(--accent);
+}
+
+/* Workout mode: a little taller, for Skip This Step above the wheel. */
+.controls[data-workout='true'] {
+  height: calc(17vh + 3.2em);
+}
+
+.speedControls[data-workout='true'] {
+  grid-template-rows: 3em minmax(0, 1fr);
+  grid-template-areas:
+    'rec skip run'
+    'rec wheel run';
+}
+
+.recoverySlot {
+  grid-area: rec;
+}
+
+.skipSlot {
+  grid-area: skip;
+}
+
+.wheelSlot {
+  grid-area: wheel;
+  display: flex;
+  min-height: 0;
+}
+
+.wheelSlot > * {
+  flex: 1;
+}
+
+.runSlot {
+  grid-area: run;
+}
+
+/* "Apply to all intervals in this step?" floats just above the speed controls. */
+.prompt {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + var(--gap));
 }

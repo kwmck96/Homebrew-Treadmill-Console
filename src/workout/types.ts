@@ -1,3 +1,5 @@
+import type { PlanRun } from './runner'
+
 export type WorkoutStatus = 'running' | 'paused' | 'finished'
 
 /**
@@ -55,4 +57,11 @@ export interface WorkoutRecord {
   elevLossM: number
   laps: Lap[]
   samples: Sample[]
+  /**
+   * A structured workout from the builder: its steps (as run, with any live
+   * edits), progress and per-step results. Kept on the finished record.
+   */
+  run?: PlanRun
+  /** Earlier structured workouts in the same activity, oldest first. */
+  pastRuns?: PlanRun[]
 }

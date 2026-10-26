@@ -8,6 +8,8 @@ import { useBuilder } from '../../plan/store'
 import type { BlockType } from '../../plan/types'
 import { formatAutoLap } from '../../settings/autoLap'
 import { useSettings } from '../../settings/store'
+import { activeRun, useConsole } from '../../workout/store'
+import { useShallow } from 'zustand/react/shallow'
 import { Dialog } from '../Dialog'
 import { BlockEditor } from './BlockEditor'
 import { Check } from './controls'
@@ -50,6 +52,17 @@ export function BuilderView() {
   const autoLapUnit = useSettings((s) => s.autoLapUnit)
 
   const steps = useMemo(() => expandPlan(plan, { maxHr, restHr }), [plan, maxHr, restHr])
+  const beginPlan = useConsole((s) => s.beginPlan)
+  const workoutExists = useConsole((s) => s.workout !== null)
+  const startBlocker = useConsole(
+    useShallow((s) => {
+    if (plan.blocks.length === 0) return { canStart: false, reason: 'Add a block first' }
+    if (activeRun(s.workout)) return { canStart: false, reason: 'A workout is already running' }
+    if (s.treadmill.connection !== 'connected') return { canStart: false, reason: 'Treadmill not connected' }
+    if (s.treadmill.safetyStop) return { canStart: false, reason: 'Reattach the lanyard' }
+    return { canStart: true, reason: null }
+    }),
+  )
   const total = useMemo(() => estimateSteps(steps), [steps])
   const perBlock = useMemo(() => estimateByBlock(steps), [steps])
   const selectedIndex = plan.blocks.findIndex((b) => b.id === selectedId)
@@ -242,12 +255,11 @@ export function BuilderView() {
           <button
             type="button"
             className={styles.start}
-            disabled
-            title="The workout runner arrives in the next update"
+            disabled={!startBlocker.canStart}
             onClick={() => setDialog('start')}
           >
             Start workout
-            <small>Coming in the next update</small>
+            {startBlocker.reason && <small>{startBlocker.reason}</small>}
           </button>
         </div>
       </footer>
@@ -274,6 +286,29 @@ export function BuilderView() {
           ]}
         >
           <p>This clears every block from the builder. Workouts saved in the library aren't affected.</p>
+        </Dialog>
+      )}
+      {dialog === 'start' && (
+        <Dialog
+          title="Are you sure you want to begin?"
+          actions={[
+            { label: 'Cancel', onClick: () => setDialog(null) },
+            {
+              label: 'Begin',
+              tone: 'primary',
+              onClick: () => {
+                setDialog(null)
+                beginPlan(plan)
+              },
+            },
+          ]}
+        >
+          <p>
+            {workoutExists
+              ? 'This continues your current activity: the workout starts after a 5-second countdown.'
+              : 'After a 5-second countdown the belt starts at walking speed, then speeds up to the first step.'}{' '}
+            You can change what's left of the workout while it runs by tapping the workout banner.
+          </p>
         </Dialog>
       )}
       {dialog === 'rename' && (

@@ -2,13 +2,16 @@ import { useState } from 'react'
 import { formatPace, formatSpeed, paceUnitLabel, speedUnitLabel } from '../lib/units'
 import { useSettings } from '../settings/store'
 import { clampIncline, clampSpeed, quantize } from '../treadmill/limits'
-import { effectiveLimits, useConsole } from '../workout/store'
+import { activeRun, effectiveLimits, useConsole } from '../workout/store'
 import { ControlBar } from './ControlBar'
 import { FieldGrid } from './FieldGrid'
 import { Lane } from './Lane'
 import styles from './ControlCenterView.module.css'
 import { PauseBanner } from './PauseBanner'
 import { PendingLapOverlay } from './PendingLapOverlay'
+import laneStyles from './Lane.module.css'
+import { WorkoutBanner } from './workout/WorkoutBanner'
+import { AddRecoveryButton, ApplyPrompt, SkipStepButton, WorkoutCompleteCard } from './workout/WorkoutMode'
 
 const SPEED_STEPS = [
   { label: '+1', delta: 1 },
@@ -33,6 +36,9 @@ export function ControlCenterView() {
   const { nudgeSpeed, nudgeIncline, jumpToPreset } = useConsole.getState()
   const settings = useSettings()
   const [editing, setEditing] = useState<'speed' | 'incline' | null>(null)
+  // Workout mode (exception to M3): +15s / +30s Recovery and Skip This Step
+  // replace the speed presets while a structured workout runs.
+  const workoutMode = useConsole((s) => activeRun(s.workout) !== null)
 
   const unit = settings.distanceUnit
   const running = workout?.status === 'running'
@@ -96,12 +102,24 @@ export function ControlCenterView() {
         stepUnit="mph"
         onStep={nudgeSpeed}
         enabled={canDrive}
+        presetsSlot={
+          workoutMode ? (
+            <>
+              <AddRecoveryButton seconds={15} className={laneStyles.workoutControl} />
+              <AddRecoveryButton seconds={30} className={laneStyles.workoutControl} />
+              <SkipStepButton className={laneStyles.workoutControl} />
+            </>
+          ) : undefined
+        }
+        overlay={workoutMode ? <ApplyPrompt /> : undefined}
       />
 
       <section className={styles.center}>
+        <WorkoutBanner compact />
         <PauseBanner />
         <div className={styles.fieldsArea}>
           <FieldGrid
+            compact={workoutMode}
             ctx={{
               record: workout,
               actualSpeedMph: speed,
@@ -111,6 +129,7 @@ export function ControlCenterView() {
             }}
           />
           <PendingLapOverlay />
+          <WorkoutCompleteCard />
         </div>
         <div className={styles.controls}>
           <ControlBar />
@@ -144,6 +163,7 @@ export function ControlCenterView() {
         stepUnit="percent"
         onStep={nudgeIncline}
         enabled={canDrive}
+        hideLapToggle={workoutMode}
       />
     </main>
   )

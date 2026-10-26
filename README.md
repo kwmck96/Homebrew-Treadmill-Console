@@ -2,7 +2,7 @@
 
 A custom touchscreen console for a Precor TRM 885 treadmill, replacing the stock P80 workout screen. It runs on an Amazon Fire HD 10 (11th gen) in landscape.
 
-**Status: v0.3, simulator only.** The app runs against a simulated treadmill. The real hardware driver (an ESP32 bridge on the console data cable) comes after the data-cable capture. The full requirements live in the Claude project doc `treadmill-app-requirements.md`; requirement IDs (M3, S4, …) in code comments refer to it.
+**Status: v0.4, simulator only.** The app runs against a simulated treadmill. The real hardware driver (an ESP32 bridge on the console data cable) comes after the data-cable capture. The full requirements live in the Claude project doc `treadmill-app-requirements.md`; requirement IDs (M3, S4, …) in code comments refer to it.
 
 > **Safety:** the on-screen Stop button is a convenience. The real stops are the lanyard and physical buttons wired to the controller (requirements S1, S5), and hard speed/incline limits live in the controller firmware (S3). Nothing in this app is a safety boundary.
 
@@ -38,7 +38,7 @@ Three views, switched with the tabs in the status bar: Control Center, Charts an
   - **Returning to live:** while running, the graph returns after 10 s untouched, with a "Graph returns in N" bar that shortens across the top. While paused, it stays put until you swipe back to the live end, tap **Back to live**, or resume (resuming returns immediately).
   - Recording is unaffected: scroll position and cursor are display-only.
 
-**Workout Builder** (phase 1 of 3: building and saving; running a workout comes next)
+**Workout Builder**
 - Elements: Warmup, Strides, Steady state, Intervals, Nested intervals, Hills, Rest, Active recovery, Cooldown. **Tap** one to add it at the end, or **drag** it into place; drag a block by its grip to reorder.
 - Tap a block to edit it on the right:
   - **Duration:** time or distance (with 200 m / 400 m / 800 m / 1 km / 1 mi shortcuts).
@@ -52,8 +52,20 @@ Three views, switched with the tabs in the status bar: Control Center, Charts an
   - HR, zone and effort steps count as unknown where speed matters, and the totals say how many weren't estimated.
   - Paces are rounded to the belt's 0.1 mph steps; the editor shows when that changes the pace (8:30/mi runs as 7.1 mph, 8:27/mi).
 - **Library:** Add to Library (named), Save / Save as new for loaded workouts, Load, Delete. The draft in the builder survives closing the app. **Reset** asks first.
-- Opening the builder during a run offers to pause first. **Start workout** is greyed out until the runner lands.
+- Opening the builder during a run offers to pause first.
 - Defaults: Warmup and Cooldown 10:00 at 8:30/mi; Strides 4 × 15 s at 5:00/mi with 75 s rest on the treadmill; Steady state 20:00 at 6:00/mi; Intervals 4 × 3:00 at 6:00/mi with 1:30 active recovery at 8:00/mi; Hills 6 × 1:00 at 6:40/mi and 4 % with 1:30 at 8:00/mi and 0 %; Nested 3 sets × 4 × 1:00 at 5:30/mi, 1:00 recovery, 3:00 between sets; Active recovery 3:00 at 8:00/mi; Rest 2:00 on the treadmill.
+
+**Workout mode** (running a workout from the builder)
+- **Start workout** asks "Are you sure you want to begin?", then a full-screen 5-second countdown (with Cancel). The belt starts at walking speed and speeds up to the first step; the app switches to Charts. Starting while a free run is paused or running continues the same activity.
+- **Banner** on both views: "Workout Mode · Interval 2 of 4 · 1:42 left · Next: Recovery 1:30", the step's target, and a progress bar. It also shows "Speeding up for…", "Resuming in 3", "Getting up to speed" and "Paused". Tap it for **all steps**: finished steps (locked, with actual time, distance and pace), the current one and those after it. For the current step you can change the time or distance left, belt speed and incline; for later steps, their duration, speed and incline.
+- **Step timing:** reps and steady state start and end at speed. The ramp into a rep happens at the end of the recovery before it (estimated from the ramp rates), and the ramp down at the start of the recovery after it. Two reps back to back: the next starts at the boundary and its ramp counts in it. Each step is a lap; **Take Split** still splits within a step, and auto-lap applies unless the workout disables it.
+- **Controls:** the speed presets are replaced (an exception to M3) by **+15s Recovery**, **+30s Recovery** (greyed out except during recovery and rest; they push back the next rep) and **Skip This Step**. On Charts, +15s and +30s take the Recover and Run spots and Skip sits above the wheel. Incline presets stay on Control Center.
+- **Apply to all intervals in this step?** After you change speed or incline by hand during a rep that has reps left in its block (or set), this appears above the speed controls once the changes settle for about a second. **No** fills over 3 s and is chosen automatically (further changes restart the fill). **Yes** copies the speed and incline you finish the rep at to the remaining reps of that block, or of that set for nested intervals. Recovery changes work the same way for the remaining recoveries. Not shown for steady state or single steps.
+- **Off-treadmill rest:** the belt runs at the next rep's speed and incline, the clock runs, and no distance is logged.
+- **Pause** freezes the step clock. **Resume** starts the belt at walking speed, counts down 3-2-1, then goes to the step's settings; a rep's clock restarts once the belt is back up to speed.
+- **End:** after the last step the belt holds its speed and "Workout complete" shows **End** (fills over 5 s, then ends the workout) and **Keep running** (back to a free run, starting a new lap).
+- The **summary** adds a target-vs-actual table per step (time, distance, pace, average HR; skipped steps and added recovery marked). The plan, as run, is saved with the workout. A reload mid-workout restores it paused at the same step.
+- HR, zone and effort steps run at their starting pace for now; coaching, HR auto-advance and step-change beeps come in phase 3.
 
 **Both**
 - **Preset laps wait for the ramp.** When a preset tap splits a lap, the speed/incline change goes out immediately but the lap waits. An overlay shows the estimated speed and incline climbing to the new targets, then counts down 3-2-1 and starts the lap.
@@ -117,7 +129,9 @@ src/
                and inspect.ts (look-back gestures and point-in-time readings)
   plan/        Structured workouts: types, element defaults, expand (blocks → steps), estimates,
                the builder draft store and the IndexedDB library
-  ui/          React components; ui/charts/ holds the Charts view, ui/builder/ the Workout Builder
+               (workout/runner.ts steps through a plan while it runs: pure, like engine.ts)
+  ui/          React components; ui/charts/ the Charts view, ui/builder/ the Workout Builder,
+               ui/workout/ the workout-mode banner, controls and step sheet
 ```
 
 The UI never talks to hardware directly; it calls the store, and the store calls whichever `TreadmillDriver` is selected in `workout/store.ts`. Swapping the simulator for the real bridge is a one-line change there.
@@ -144,6 +158,10 @@ Internal units: speed in mph and incline in % (the treadmill's native control un
 | −3 % decline | Settings | Assumed per Precor spec; unconfirmed on this V1 |
 | Heart-rate profile | `heartrate/model.ts` | Rest 55, max 190, VO₂max 68 (simulator only) |
 
+## Known issues
+
+- **Stub lap when auto-lap lands during a preset ramp.** If an auto-lap falls within the few seconds after a Run/Recover tap (while the delayed preset lap waits for the ramp), you get the auto-lap and then a short stub lap when the preset lap fires. Parked to fix later (one option: let the pending preset lap absorb an auto-lap that lands during its ramp).
+
 ## Not built yet
 
-Running workouts from the builder (phase 2: workout mode banner, step timing, +15s/+30s recovery, Skip This Step, end-of-workout countdown; phase 3: HR/zone/effort coaching, HR auto-advance, step-change beeps), diagnostics screen (D1/D2), workout history list, auto-lap (H5), a real Bluetooth heart-rate strap (H1; simulated for now), calibration factor (H2), music controls (H3), Capacitor APK packaging, and the real treadmill driver.
+Workout builder phase 3 (HR/zone/effort coaching, HR auto-advance, step-change flash and beeps), diagnostics screen (D1/D2), workout history list, a real Bluetooth heart-rate strap (H1; simulated for now), calibration factor (H2), music controls (H3), Capacitor APK packaging, and the real treadmill driver.

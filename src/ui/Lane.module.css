@@ -1,4 +1,5 @@
 .lane {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--gap);
@@ -290,4 +291,18 @@
   background: var(--accent);
   color: var(--accent-ink);
   border-color: var(--accent);
+}
+
+/* Workout mode: +15s / +30s / Skip in place of the presets. */
+.workoutControl {
+  min-height: 5.4em;
+}
+
+.overlay {
+  position: absolute;
+  left: var(--gap);
+  right: var(--gap);
+  top: 50%;
+  z-index: 30;
+  transform: translateY(-50%);
 }
