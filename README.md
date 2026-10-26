@@ -18,7 +18,12 @@ Two workout views, switched with the tabs in the status bar:
 - Laps, six configurable data fields (tap a tile to change it), including heart rate, average HR and lap average HR
 
 **Charts**
-- Pace/speed, incline, time and distance across the top; speed steps (bottom left), Pause/Lap (bottom centre), incline steps (bottom right)
+- Pace/speed, incline, time and distance across the top
+- Bottom left: **Recover** button, a **speed wheel**, and a **Run** button
+  - Drag the wheel sideways to change speed in 0.1 mph steps (dragging left speeds up). While the belt is running it drives the belt directly; while stopped or paused it only sets a value. It moves only while touched, with no fling momentum, so a flick can't keep spinning the speed up. Arrow keys and a mouse scroll wheel also work, for testing on a computer.
+  - **Tap** Recover or Run to jump to that preset. By default this also splits a lap; turn that off with **Lap on Run and Recover** in Settings.
+  - **Hold** Recover or Run for 0.7 s to save the wheel's current speed into that preset. A bar fills along the bottom while you hold, and the button shows "Saved".
+- Bottom centre: Pause/Lap (Resume/End when paused). Bottom right: incline steps
 - Lap splits down the left: current lap on top, completed laps newest-first with Strava-style bars (longer = faster), lap time, pace, distance and average HR
 - Live graph of speed, incline and heart rate, with alternating grey bands for laps and each lap's time, pace, distance and average HR at the bottom of its band
 - Ranges: **5 min**, **15 min** (default) and **Full**. The x-axis starts at 0–6 min. After 5 minutes, 5 min slides a 6-minute window, 15 min zooms out until it shows 15 minutes then slides, and Full keeps zooming out. All y-axes rescale to the visible data and share gridlines.

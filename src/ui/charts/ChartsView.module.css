@@ -97,10 +97,18 @@
 
 .controls {
   display: grid;
-  grid-template-columns: 1.5fr 1.35fr 0.85fr;
+  grid-template-columns: 2.1fr 1.1fr 0.8fr;
   gap: calc(var(--gap) * 2);
-  height: 14vh;
-  min-height: 4.6em;
+  height: 17vh;
+  min-height: 5.6em;
+}
+
+/* Recover | wheel | Run */
+.speedControls {
+  display: grid;
+  grid-template-columns: minmax(5.5em, 0.55fr) minmax(0, 1.3fr) minmax(5.5em, 0.55fr);
+  gap: var(--gap);
+  min-width: 0;
 }
 
 .center {

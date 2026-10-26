@@ -34,6 +34,11 @@ interface ConsoleState {
   /** 1 on real hardware. Above 1 only while testing with the simulator. */
   simTimeScale: SimTimeScale
   workout: WorkoutRecord | null
+  /**
+   * The speed shown on the Charts view's wheel. Follows the belt's target
+   * while it's running; turns freely (without moving the belt) otherwise.
+   */
+  dialMph: number
   /** The finished workout whose summary is on screen (M8). */
   summary: WorkoutRecord | null
 }
@@ -47,13 +52,17 @@ interface ConsoleActions {
   stopNow: () => Promise<void>
   endWorkout: () => Promise<void>
   discardWorkout: () => Promise<void>
-  lap: () => void
+  lap: (trigger?: 'manual' | 'preset') => void
   dismissSummary: () => void
   setSpeed: (mph: number) => void
   nudgeSpeed: (deltaMph: number) => void
   setIncline: (pct: number) => void
   nudgeIncline: (deltaPct: number) => void
   setSimTimeScale: (scale: SimTimeScale) => void
+  /** Wheel turned: drives the belt while running, otherwise just moves the dial. */
+  setDial: (mph: number) => void
+  /** Run / Recover tapped: go to that preset, splitting a lap if enabled. */
+  jumpToPreset: (presetId: string) => void
 }
 
 // ---- driver selection ----------------------------------------------------
@@ -113,6 +122,15 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
   function onTreadmill(state: TreadmillState) {
     set({ treadmill: state })
     if (state.belt === 'running') awaitingBeltStart = false
+    // Keep the wheel on whatever the belt was last told to do.
+    if (
+      state.belt === 'running' &&
+      state.connection === 'connected' &&
+      state.targetSpeedMph > 0 &&
+      state.targetSpeedMph !== get().dialMph
+    ) {
+      set({ dialMph: state.targetSpeedMph })
+    }
 
     const { workout } = get()
     if (!workout || workout.status !== 'running') return
@@ -186,6 +204,9 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
     heartRate: heartRateSource.getState(),
     simTimeScale: 1,
     workout: null,
+    dialMph:
+      useSettings.getState().speedPresets.find((p) => p.id === 'recovery')?.value ??
+      useSettings.getState().startSpeedMph,
     summary: null,
 
     async init() {
@@ -252,10 +273,10 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
       await clearActiveWorkout()
     },
 
-    lap() {
+    lap(trigger = 'manual') {
       const { workout } = get()
       if (!workout || workout.status === 'finished') return
-      commit(engine.addLap(workout, now()))
+      commit(engine.addLap(workout, now(), trigger))
     },
 
     dismissSummary() {
@@ -280,6 +301,21 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
 
     nudgeIncline(delta) {
       get().setIncline(get().treadmill.targetInclinePct + delta)
+    },
+
+    setDial(mph) {
+      const value = clampSpeed(mph, effectiveLimits())
+      set({ dialMph: value })
+      if (canDrive()) void driver.setSpeed(value)
+    },
+
+    jumpToPreset(presetId) {
+      if (!canDrive()) return
+      const { speedPresets, lapOnPresetTap } = useSettings.getState()
+      const preset = speedPresets.find((p) => p.id === presetId)
+      if (!preset) return
+      if (lapOnPresetTap) get().lap('preset')
+      get().setSpeed(preset.value)
     },
 
     setSimTimeScale(scale) {

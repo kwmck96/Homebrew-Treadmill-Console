@@ -41,7 +41,7 @@ export function ControlBar() {
         <button type="button" className={styles.primary} onClick={() => void pauseWorkout()}>
           Pause
         </button>
-        <button type="button" className={styles.secondary} onClick={lap}>
+        <button type="button" className={styles.secondary} onClick={() => lap()}>
           Lap
         </button>
       </div>

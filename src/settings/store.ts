@@ -28,6 +28,8 @@ export interface Settings {
   view: ConsoleView
   /** Time range shown on the Charts view's graph. */
   chartRange: ChartRange
+  /** Tapping Run or Recover on the Charts view also splits a lap. */
+  lapOnPresetTap: boolean
 }
 
 interface SettingsActions {
@@ -56,6 +58,7 @@ export const DEFAULT_SETTINGS: Settings = {
   dataFields: ['elapsed', 'distance', 'lapTime', 'lapDistance', 'avgPace', 'elevGain'],
   view: 'control',
   chartRange: '15',
+  lapOnPresetTap: true,
 }
 
 export const useSettings = create<Settings & SettingsActions>()(

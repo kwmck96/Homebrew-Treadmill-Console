@@ -77,6 +77,20 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
         />
       </Row>
 
+      <Row
+        label="Lap on Run and Recover"
+        hint="On the Charts view, tapping Run or Recover also splits a lap."
+      >
+        <Segmented
+          value={s.lapOnPresetTap ? 'on' : 'off'}
+          options={[
+            ['on', 'On'],
+            ['off', 'Off'],
+          ]}
+          onChange={(v) => s.update({ lapOnPresetTap: v === 'on' })}
+        />
+      </Row>
+
       <Row label="Reset" hint="Restores presets, fields and units to their defaults.">
         <button
           type="button"

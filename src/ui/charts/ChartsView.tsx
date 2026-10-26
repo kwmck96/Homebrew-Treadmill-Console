@@ -15,22 +15,30 @@ import { HoldButton } from '../HoldButton'
 import { PauseBanner } from '../PauseBanner'
 import { ActivityChart } from './ActivityChart'
 import styles from './ChartsView.module.css'
+import { PresetHoldButton } from './PresetHoldButton'
+import { SpeedWheel } from './SpeedWheel'
 import { SplitsColumn } from './SplitsColumn'
 
-const SPEED_STEPS = [-1, -0.1, 0.1, 1]
 const INCLINE_STEPS = [-0.5, 0.5]
 const SPEED_TOLERANCE_MPH = 0.05
 const INCLINE_TOLERANCE_PCT = 0.1
 
 /**
  * Metrics across the top, splits down the left, a live graph filling the
- * rest, and speed / pause-lap / incline controls along the bottom.
+ * rest, and along the bottom: Recover / speed wheel / Run, pause-lap, and
+ * incline steps.
  */
 export function ChartsView() {
   const treadmill = useConsole((s) => s.treadmill)
   const workout = useConsole((s) => s.workout)
-  const { nudgeSpeed, nudgeIncline } = useConsole.getState()
+  const { nudgeIncline, jumpToPreset } = useConsole.getState()
   const unit = useSettings((s) => s.distanceUnit)
+  const speedPresets = useSettings((s) => s.speedPresets)
+  const recover = speedPresets.find((p) => p.id === 'recovery')
+  const run = speedPresets.find((p) => p.id === 'run')
+  // Hold-to-set saves whatever the wheel currently shows.
+  const saveWheelTo = (id: string) =>
+    useSettings.getState().setPresetValue('speed', id, useConsole.getState().dialMph)
   const showPace = useSettings((s) => s.speedDisplay) === 'pace'
 
   const canDrive =
@@ -86,15 +94,29 @@ export function ChartsView() {
       </div>
 
       <div className={styles.controls}>
-        <StepGroup
-          label="Speed"
-          accent="speed"
-          steps={SPEED_STEPS}
-          format={(d) => `${d > 0 ? '+' : '−'}${Math.abs(d)}`}
-          describe={(d) => `${d > 0 ? 'Increase' : 'Decrease'} speed by ${Math.abs(d)} mph`}
-          onStep={nudgeSpeed}
-          enabled={canDrive}
-        />
+        <div className={styles.speedControls} role="group" aria-label="Speed">
+          {recover && (
+            <PresetHoldButton
+              label="Recover"
+              valueMph={recover.value}
+              unit={unit}
+              canTap={canDrive}
+              onTap={() => jumpToPreset('recovery')}
+              onHold={() => saveWheelTo('recovery')}
+            />
+          )}
+          <SpeedWheel />
+          {run && (
+            <PresetHoldButton
+              label="Run"
+              valueMph={run.value}
+              unit={unit}
+              canTap={canDrive}
+              onTap={() => jumpToPreset('run')}
+              onHold={() => saveWheelTo('run')}
+            />
+          )}
+        </div>
         <div className={styles.center}>
           <ControlBar />
         </div>
