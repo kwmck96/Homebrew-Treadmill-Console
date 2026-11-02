@@ -174,6 +174,20 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
         </div>
       </Row>
 
+      <Row
+        label="Workout sounds"
+        hint="In a workout from the builder: a beep each second for the last 3 seconds of a step, and a higher beep when the next step starts."
+      >
+        <Segmented
+          value={s.sounds ? 'on' : 'off'}
+          options={[
+            ['on', 'On'],
+            ['off', 'Off'],
+          ]}
+          onChange={(v) => s.update({ sounds: v === 'on' })}
+        />
+      </Row>
+
       <Row label="Reset" hint="Restores presets, fields and units to their defaults.">
         <button
           type="button"

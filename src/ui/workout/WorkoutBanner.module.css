@@ -36,12 +36,15 @@
 }
 
 .text {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 1.1em;
 }
 
 .next {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -94,6 +97,25 @@
   background: var(--speed);
   color: var(--speed-ink);
   font-weight: 650;
+}
+
+.coach,
+.warn {
+  flex: none;
+  padding: 0.1em 0.6em;
+  border-radius: 999px;
+  color: var(--night);
+  font-weight: 700;
+}
+
+.warn {
+  background: var(--speed);
+  color: var(--speed-ink);
+}
+
+.banner[data-compact='true'] .coach,
+.banner[data-compact='true'] .warn {
+  grid-area: hold;
 }
 
 .target {

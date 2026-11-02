@@ -15,6 +15,7 @@ import { advancePendingLap, type PendingLap, startPendingLap } from './pendingLa
 import { archiveWorkout, clearActiveWorkout, loadActiveWorkout, saveActiveWorkout } from './persistence'
 import { expandPlan } from '../plan/expand'
 import type { WorkoutPlan } from '../plan/types'
+import { beep, COUNTDOWN_TONE, countdownMarksCrossed, primeAudio, STEP_TONE } from '../lib/beeper'
 import * as runner from './runner'
 import type { PlanRun, StepEdit } from './runner'
 import type { PauseReason, WorkoutRecord } from './types'
@@ -72,6 +73,11 @@ interface ConsoleState {
   /** Start workout confirmed: wall-clock ms left before it begins. */
   startCountdown: { leftMs: number; name: string } | null
   applyPrompt: ApplyPrompt | null
+  /**
+   * The full-width flash at a step change. `id` changes on each change so
+   * the flash replays; it fades out on its own.
+   */
+  stepFlash: { id: number; stepIndex: number } | null
 }
 
 interface ConsoleActions {
@@ -252,6 +258,8 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
 
       const run = activeRun(next)
       if (run) {
+        const speed = treadmill.actualSpeedMph
+        const leftBefore = run.phase === 'running' && run.started && !run.hold ? runner.stepRemainingMs(run, speed) : null
         const res = runner.tickRun(run, {
           dtMs: step,
           realDtMs: (realDt * step) / dt,
@@ -260,8 +268,20 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
           beltRunning: beltRunning && next.status === 'running' && !awaitingBeltStart,
           elapsedMs: next.elapsedMs,
           distanceM: next.distanceM,
+          hrBpm: get().heartRate.bpm,
         })
         next = res.run === run ? next : { ...next, run: res.run }
+        const sounds = useSettings.getState().sounds
+        // 3-2-1 beeps in the last seconds of a step, then a higher beep when
+        // the next one starts.
+        if (sounds && leftBefore != null && !res.split && !res.completed && res.run.index === run.index) {
+          const crossed = countdownMarksCrossed(leftBefore, runner.stepRemainingMs(res.run, speed))
+          for (let i = 0; i < crossed; i++) beep(COUNTDOWN_TONE)
+        }
+        if (res.split || res.completed) {
+          if (sounds) beep(STEP_TONE)
+          flashStep(res.run)
+        }
         if (res.command) sendTargets(res.command)
         if (res.split) next = splitForStep(next)
         if (res.split || res.completed) set({ applyPrompt: null })
@@ -321,6 +341,13 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
     const t = engine.lapTotals(w, lap)
     if (t.elapsedMs < 1000 && t.distanceM < 1) return w
     return engine.addLap(w, now(), 'step')
+  }
+
+  /** Step changed (or the workout completed: stepIndex -1). */
+  function flashStep(run: PlanRun) {
+    set({
+      stepFlash: { id: (get().stepFlash?.id ?? 0) + 1, stepIndex: run.phase === 'running' ? run.index : -1 },
+    })
   }
 
   function tickStartCountdown(realDt: number) {
@@ -433,6 +460,7 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
     pendingLap: null,
     startCountdown: null,
     applyPrompt: null,
+    stepFlash: null,
 
     async init() {
       if (get().ready) return
@@ -473,6 +501,7 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
       // Wait for the belt to finish stopping so Resume always starts from rest
       // at walking speed rather than catching a decelerating belt.
       if (treadmill.belt !== 'stopped') return
+      primeAudio()
       beginAwaitingBelt()
       const resumed = engine.resume(workout, now())
       const run = activeRun(resumed)
@@ -492,13 +521,13 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
       await driver.stop()
       const closed = workout.run ? { ...workout, run: runner.closeRun(workout.run, workout) } : workout
       const finished = engine.finish(closed, now())
-      set({ workout: null, summary: finished, pendingLap: null, applyPrompt: null })
+      set({ workout: null, summary: finished, pendingLap: null, applyPrompt: null, stepFlash: null })
       await archiveWorkout(finished)
     },
 
     async discardWorkout() {
       await driver.stop()
-      set({ workout: null, pendingLap: null, applyPrompt: null })
+      set({ workout: null, pendingLap: null, applyPrompt: null, stepFlash: null })
       await clearActiveWorkout()
     },
 
@@ -586,9 +615,11 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
       const { treadmill, workout } = get()
       if (treadmill.connection !== 'connected' || treadmill.safetyStop) return
       if (activeRun(workout) || get().startCountdown || plan.blocks.length === 0) return
+      // Called from the Begin tap: unlock sound for the step beeps.
+      primeAudio()
       const { maxHr, restHr } = useSettings.getState()
       queuedRun = runner.createRun(plan.name, expandPlan(plan, { maxHr, restHr }), plan.disableAutoLap ?? false)
-      set({ startCountdown: { leftMs: START_COUNTDOWN_MS, name: plan.name }, pendingLap: null })
+      set({ startCountdown: { leftMs: START_COUNTDOWN_MS, name: plan.name }, pendingLap: null, stepFlash: null })
       useSettings.getState().update({ view: 'charts' })
     },
 
@@ -613,6 +644,8 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
       if (workout.status === 'running' && res.command) sendTargets(res.command)
       if (res.split) next = splitForStep(next)
       set({ applyPrompt: null })
+      if (useSettings.getState().sounds) beep(STEP_TONE)
+      flashStep(res.run)
       commit(next)
     },
 

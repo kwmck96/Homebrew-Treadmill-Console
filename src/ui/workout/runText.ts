@@ -12,7 +12,9 @@ export function describeStepTarget(step: PlannedStep, unit: DistanceUnit): strin
   } else if (step.targetKind === 'pace') {
     parts.push(`${formatPace(step.speedMph, unit)}${paceUnitLabel(unit)}`)
   }
-  if (step.targetKind === 'hr' || step.targetKind === 'zone') {
+  if (step.targetKind === 'zone' && step.zone != null) {
+    parts.push(`Zone ${step.zone} · ${step.hrRange?.low}–${step.hrRange?.high} bpm`)
+  } else if (step.targetKind === 'hr' || step.targetKind === 'zone') {
     parts.push(`${step.hrRange?.low}–${step.hrRange?.high} bpm`)
   } else if (step.targetKind === 'rpe') {
     parts.push(`Effort ${step.rpe}`)
@@ -24,9 +26,17 @@ export function describeStepTarget(step: PlannedStep, unit: DistanceUnit): strin
   return parts.join(' · ')
 }
 
-/** "1:42 left", "0.18 mi left". */
+/**
+ * "1:42 left", "0.18 mi left". HR auto-advance steps before the target is
+ * reached: "1:42 max · next at ≤ 120 bpm".
+ */
 export function remainingText(run: PlanRun, unit: DistanceUnit): string {
+  const step = run.steps[run.index]
   const left = stepRemaining(run)
+  if (step?.advanceAtHr != null && run.hrEndAtMs == null) {
+    const max = 'ms' in left ? formatDuration(Math.ceil(left.ms / 1000) * 1000) : `${formatDistance(left.m, unit)} ${unit}`
+    return `${max} max · next at ≤ ${step.advanceAtHr} bpm`
+  }
   if ('ms' in left) return `${formatDuration(Math.ceil(left.ms / 1000) * 1000)} left`
   const plus = left.extraMs > 0 ? ` + ${formatDuration(left.extraMs)}` : ''
   return `${formatDistance(left.m, unit)} ${unit} left${plus}`

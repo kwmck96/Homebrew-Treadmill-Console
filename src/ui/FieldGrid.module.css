@@ -90,3 +90,20 @@
 .option[data-selected='true'] .swap {
   color: var(--night);
 }
+
+.labelRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  max-width: 100%;
+}
+
+/* HR coaching: Too Low / On target / Too High, in the coaching colour. */
+.badge {
+  padding: 0.05em 0.6em;
+  border-radius: 999px;
+  color: var(--night);
+  font-size: 0.9em;
+  font-weight: 700;
+  white-space: nowrap;
+}

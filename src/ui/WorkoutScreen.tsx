@@ -5,7 +5,7 @@ import { ChartsView } from './charts/ChartsView'
 import { ControlCenterView } from './ControlCenterView'
 import { StatusBar } from './StatusBar'
 import { useWakeLock } from './useWakeLock'
-import { StartCountdown } from './workout/WorkoutMode'
+import { StartCountdown, StepFlash } from './workout/WorkoutMode'
 import styles from './WorkoutScreen.module.css'
 
 /** Status bar plus whichever workout view is selected. */
@@ -21,6 +21,7 @@ export function WorkoutScreen() {
       <StatusBar />
       {view === 'charts' ? <ChartsView /> : view === 'builder' ? <BuilderView /> : <ControlCenterView />}
       <StartCountdown />
+      <StepFlash />
     </div>
   )
 }
