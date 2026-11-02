@@ -1,0 +1,82 @@
+# Builds the Android APK for the Fire tablet on every push to main and puts it
+# on the "Latest APK" release, so the download link never changes:
+# https://github.com/kwmck96/Homebrew-Treadmill-Console/releases/download/apk-latest/treadmill-console.apk
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+  # Pull requests build the APK (as a downloadable artifact) without publishing it.
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - run: npm ci
+      - run: npm run check
+      - name: Build the web app and copy it into the Android project
+        run: npm run android:sync
+
+      # Optional private signing key. Without these secrets the committed
+      # sideload key is used (see android/app/build.gradle).
+      - name: Private signing key (if configured)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build APK
+        working-directory: android
+        env:
+          APP_VERSION_CODE: ${{ github.run_number }}
+          APP_VERSION_NAME: 0.6.${{ github.run_number }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/treadmill-console.apk"
+
+      - name: Publish to the "Latest APK" release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="Build ${{ github.run_number }} (version 0.6.${{ github.run_number }}) from ${GITHUB_SHA::7}. On the Fire tablet, open this page in Silk, tap treadmill-console.apk, then Install. It installs over the previous version and keeps your data."
+          if ! gh release view apk-latest > /dev/null 2>&1; then
+            gh release create apk-latest --title "Latest APK" --notes "$notes" --target "$GITHUB_SHA"
+          else
+            gh release edit apk-latest --notes "$notes"
+          fi
+          gh release upload apk-latest treadmill-console.apk --clobber
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: treadmill-console-apk
+          path: treadmill-console.apk
+          retention-days: 14

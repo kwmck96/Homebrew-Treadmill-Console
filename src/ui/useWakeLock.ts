@@ -1,3 +1,5 @@
+import { KeepAwake } from '@capacitor-community/keep-awake'
+import { Capacitor } from '@capacitor/core'
 import { useEffect } from 'react'
 
 /**
@@ -5,12 +7,17 @@ import { useEffect } from 'react'
  * API, which browsers release when the page is hidden, so it's re-requested
  * when the page becomes visible again.
  *
- * Inside the Capacitor APK this should be swapped for (or backed by) a native
- * keep-awake plugin, since WebView support for this API varies.
+ * Inside the APK it uses a native keep-awake plugin instead, since WebView
+ * support for the browser API varies.
  */
 export function useWakeLock(active: boolean) {
   useEffect(() => {
-    if (!active || !('wakeLock' in navigator)) return
+    if (!active) return
+    if (Capacitor.isNativePlatform()) {
+      void KeepAwake.keepAwake().catch(() => {})
+      return () => void KeepAwake.allowSleep().catch(() => {})
+    }
+    if (!('wakeLock' in navigator)) return
     let sentinel: WakeLockSentinel | null = null
     let cancelled = false
 

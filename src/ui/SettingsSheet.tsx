@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { type ReactNode, useState } from 'react'
 import { quantize } from '../treadmill/limits'
 import {
   AUTO_LAP_LIMITS,
@@ -8,7 +8,9 @@ import {
   stepAutoLap,
 } from '../settings/autoLap'
 import { useSettings } from '../settings/store'
-import { useConsole } from '../workout/store'
+import { getHeartRateSource, useConsole } from '../workout/store'
+import { bluetoothAvailable, openLocationSettings } from '../heartrate/bluetooth'
+import type { HeartRateMode } from '../heartrate/hub'
 import { HoldButton } from './HoldButton'
 import styles from './Panels.module.css'
 import { Sheet } from './Sheet'
@@ -83,6 +85,8 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
           onChange={(v) => s.update({ minInclinePct: Number(v) })}
         />
       </Row>
+
+      <HeartRateRows />
 
       <Row
         label="Lap on Run and Recover"
@@ -202,7 +206,7 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
   )
 }
 
-function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+function Row({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   return (
     <div className={styles.row}>
       <div>
@@ -243,5 +247,102 @@ function Segmented<T extends string>({
         </button>
       ))}
     </div>
+  )
+}
+
+/**
+ * Heart rate: the simulated strap, or a paired Bluetooth sensor (H1). Any
+ * sensor that broadcasts the standard heart-rate service works.
+ */
+function HeartRateRows() {
+  const mode = useSettings((s) => s.hrMode)
+  const sensor = useSettings((s) => s.hrSensor)
+  const update = useSettings((s) => s.update)
+  const hr = useConsole((s) => s.heartRate)
+  const [busy, setBusy] = useState(false)
+  const hub = getHeartRateSource()
+  const btAvailable = bluetoothAvailable()
+
+  const setMode = async (m: HeartRateMode) => {
+    update({ hrMode: m })
+    await hub.use(m)
+  }
+  const pair = async () => {
+    setBusy(true)
+    try {
+      await setMode('bluetooth')
+      const paired = await hub.bluetooth.pair()
+      if (paired) update({ hrSensor: paired })
+    } finally {
+      setBusy(false)
+    }
+  }
+  const forget = async () => {
+    await hub.bluetooth.forget()
+    update({ hrSensor: null })
+  }
+
+  const status =
+    mode === 'simulated'
+      ? null
+      : hr.connection === 'connected'
+        ? `${hr.deviceName ?? sensor?.name}: connected${hr.bpm != null ? ` · ${hr.bpm} bpm` : ''}`
+        : hr.connection === 'connecting'
+          ? `${hr.deviceName ?? sensor?.name}: connecting…`
+          : sensor
+            ? `${sensor.name}: not connected`
+            : 'No sensor paired'
+
+  return (
+    <>
+      <Row
+        label="Heart rate"
+        hint={
+          btAvailable
+            ? 'Simulated until you pair a sensor. A paired sensor reconnects by itself whenever the app opens.'
+            : 'Bluetooth sensors work in the tablet app, or in Chrome on a computer. This browser can only use the simulated strap.'
+        }
+      >
+        <Segmented
+          value={mode}
+          options={[
+            ['simulated', 'Simulated'],
+            ['bluetooth', 'Bluetooth'],
+          ]}
+          onChange={(m) => void setMode(m)}
+          disabled={!btAvailable}
+          label="Heart-rate source"
+        />
+      </Row>
+      {mode === 'bluetooth' && (
+        <Row
+          label={status ?? ''}
+          hint={
+            <>
+              {hr.detail && <span className={styles.hrDetail}>{hr.detail} </span>}
+              Polar Verity Sense: press the button until the heart light is on (heart-rate mode).
+              COROS: hold BACK › Toolbox › Broadcast HR, with the watch disconnected from your phone
+              first (it allows only one Bluetooth connection while broadcasting).
+            </>
+          }
+        >
+          <div className={styles.hrActions}>
+            {hr.needsLocation && (
+              <button type="button" className={styles.action} onClick={() => void openLocationSettings()}>
+                Location settings
+              </button>
+            )}
+            <button type="button" className={styles.action} disabled={busy} onClick={() => void pair()}>
+              {busy ? 'Searching…' : sensor ? 'Pair another' : 'Pair a sensor'}
+            </button>
+            {sensor && (
+              <button type="button" className={styles.action} onClick={() => void forget()}>
+                Forget
+              </button>
+            )}
+          </div>
+        </Row>
+      )}
+    </>
   )
 }

@@ -2,7 +2,7 @@
 
 A custom touchscreen console for a Precor TRM 885 treadmill, replacing the stock P80 workout screen. It runs on an Amazon Fire HD 10 (11th gen) in landscape.
 
-**Status: v0.5, simulator only.** The app runs against a simulated treadmill. The real hardware driver (an ESP32 bridge on the console data cable) comes after the data-cable capture. The full requirements live in the Claude project doc `treadmill-app-requirements.md`; requirement IDs (M3, S4, …) in code comments refer to it.
+**Status: v0.6, simulator treadmill; real Bluetooth heart rate.** The app runs against a simulated treadmill. The real hardware driver (an ESP32 bridge on the console data cable) comes after the data-cable capture. The full requirements live in the Claude project doc `treadmill-app-requirements.md`; requirement IDs (M3, S4, …) in code comments refer to it.
 
 > **Safety:** the on-screen Stop button is a convenience. The real stops are the lanyard and physical buttons wired to the controller (requirements S1, S5), and hard speed/incline limits live in the controller firmware (S3). Nothing in this app is a safety boundary.
 
@@ -102,6 +102,27 @@ Vite prints two URLs:
 - **Local** (`http://localhost:5173/`): open on the Mac. Use Chrome's device toolbar (⌥⌘I, then the phone/tablet icon) and set a 1280 × 800 viewport to approximate the Fire tablet.
 - **Network** (`http://192.168.x.x:5173/`): open this in the Fire tablet's Silk browser while it's on the same Wi-Fi. Edits on the Mac reload on the tablet instantly.
 
+## Install on the Fire tablet (APK)
+
+Every push to `main` builds the Android app on GitHub Actions and replaces the APK on the [Latest APK](https://github.com/kwmck96/Homebrew-Treadmill-Console/releases/tag/apk-latest) release. Pull requests build it too (download it from the run's *Artifacts*) without publishing.
+
+First install:
+1. On the tablet, open Silk and go to the Latest APK release page. Tap **treadmill-console.apk** to download it.
+2. Open the download. Fire OS asks to allow installing unknown apps from Silk: allow it (Settings › Security & Privacy › Apps from Unknown Sources › Silk), go back, tap **Install**.
+3. Open **Treadmill Console**. It runs full screen, locked to landscape, and keeps the screen on during workouts.
+
+Updates: download the APK again and install; it replaces the old version and keeps your data. Don't uninstall first, because uninstalling deletes the app's saved workouts and library.
+
+Signing: builds are signed with the committed `android/app/sideload.keystore` (standard Android debug passwords) so every build can update the last one. To use a private key instead, add `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD` as repository secrets; switching keys needs one uninstall.
+
+The APK keeps its own data, separate from Silk/Vercel: workouts saved in the browser version don't appear in the app.
+
+**Heart-rate sensor:** Settings › Heart rate › Bluetooth › **Pair a sensor**, and pick it from the list. It reconnects by itself every time the app opens and whenever the link drops.
+- Polar Verity Sense: press the button until the heart light is on (heart-rate mode).
+- COROS watch: hold BACK › Toolbox › **Broadcast HR**. Disconnect the watch from your phone first; it allows one Bluetooth connection while broadcasting.
+- Fire OS 7 (Android 9) only finds Bluetooth sensors with **Location** switched on; the app asks for location permission and offers a shortcut to the setting. It never uses your location.
+- On a computer, desktop Chrome can pair a sensor too (Web Bluetooth), but has to be shown the sensor again after each reload.
+
 ## Deploy to Vercel (for testing on the tablet anywhere)
 
 1. In Vercel, **Add New → Project**, import `kwmck96/Homebrew-Treadmill-Console`.
@@ -130,7 +151,9 @@ src/
                persistence.ts: IndexedDB storage; fields.ts: the data-field definitions
   settings/    User settings (presets, units, fields), saved in localStorage
   lib/units.ts Unit conversion and formatting; lib/beeper.ts the workout beeps (Web Audio)
-  heartrate/   HeartRateSource interface and the simulated strap (model.ts is the physiology)
+  heartrate/   HeartRateSource interface; the simulated strap (model.ts is the physiology), the
+               Bluetooth sensor (bluetooth.ts, standard Heart Rate Service) and hub.ts, which switches them
+android/       The Capacitor Android project (APK). Built by .github/workflows/android.yml
   charts/      Chart math: visible time window, panning, y-scales, thinning long workouts,
                and inspect.ts (look-back gestures and point-in-time readings)
   plan/        Structured workouts: types, element defaults, expand (blocks → steps), estimates,
@@ -171,4 +194,4 @@ Internal units: speed in mph and incline in % (the treadmill's native control un
 
 ## Not built yet
 
-Diagnostics screen (D1/D2), workout history list, a real Bluetooth heart-rate strap (H1; simulated for now), calibration factor (H2), music controls (H3), Capacitor APK packaging, and the real treadmill driver.
+Diagnostics screen (D1/D2), workout history list, calibration factor (H2), music controls (H3), and the real treadmill driver.

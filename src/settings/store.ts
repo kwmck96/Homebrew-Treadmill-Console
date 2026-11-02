@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { DistanceUnit, SpeedDisplay } from '../lib/units'
+import type { PairedSensor } from '../heartrate/bluetooth'
+import type { HeartRateMode } from '../heartrate/hub'
 import { type AutoLapUnit, autoLapToMeters, followDistanceUnit } from './autoLap'
 import type { FieldId } from '../workout/fields'
 
@@ -45,6 +47,10 @@ export interface Settings {
   /** In `autoLapUnit`, which is independent of `distanceUnit`. */
   autoLapDistance: number
   autoLapUnit: AutoLapUnit
+  /** Heart rate from the simulated strap or a paired Bluetooth sensor (H1). */
+  hrMode: HeartRateMode
+  /** The paired Bluetooth sensor, reconnected to automatically. */
+  hrSensor: PairedSensor | null
 }
 
 interface SettingsActions {
@@ -84,6 +90,8 @@ export const DEFAULT_SETTINGS: Settings = {
   autoLap: true,
   autoLapDistance: 1,
   autoLapUnit: 'mi',
+  hrMode: 'simulated',
+  hrSensor: null,
 }
 
 /** Auto-lap distance in metres, or null when auto-lap is off. */
@@ -122,7 +130,14 @@ export const useSettings = create<Settings & SettingsActions>()(
         }),
       // Keep the current view and chart range; "reset" is about workout settings.
       resetToDefaults: () =>
-        set((s) => ({ ...DEFAULT_SETTINGS, view: s.view, chartRange: s.chartRange })),
+        set((s) => ({
+          ...DEFAULT_SETTINGS,
+          view: s.view,
+          chartRange: s.chartRange,
+          // A paired sensor isn't a workout setting; keep it.
+          hrMode: s.hrMode,
+          hrSensor: s.hrSensor,
+        })),
     }),
     {
       name: 'htc-settings',

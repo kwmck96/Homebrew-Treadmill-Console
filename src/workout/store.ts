@@ -4,8 +4,8 @@
  * it with `useConsole(selector)`; the timer loop lives here, not in React.
  */
 import { create } from 'zustand'
-import { SimulatedHeartRate } from '../heartrate/simulator'
-import type { HeartRateSource, HeartRateState } from '../heartrate/types'
+import { HeartRateHub } from '../heartrate/hub'
+import type { HeartRateState } from '../heartrate/types'
 import { autoLapMeters, useSettings } from '../settings/store'
 import { clampIncline, clampSpeed, TRM885_LIMITS } from '../treadmill/limits'
 import { SimulatedTreadmill } from '../treadmill/simulator'
@@ -118,14 +118,15 @@ interface ConsoleActions {
 // The only place that decides which hardware backend to use. When the ESP32
 // bridge exists, its driver gets chosen here (e.g. from a setting).
 const driver: TreadmillDriver = new SimulatedTreadmill()
-// Same for heart rate: a Bluetooth strap source replaces this later (H1).
-const heartRateSource: HeartRateSource = new SimulatedHeartRate()
+// Heart rate: the simulated strap or a paired Bluetooth sensor (H1), switched
+// in Settings. The hub forwards whichever is active.
+const heartRateSource = new HeartRateHub(useSettings.getState().hrMode, useSettings.getState().hrSensor)
 
 export function getDriver(): TreadmillDriver {
   return driver
 }
 
-export function getHeartRateSource(): HeartRateSource {
+export function getHeartRateSource(): HeartRateHub {
   return heartRateSource
 }
 
@@ -210,9 +211,7 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
     const { treadmill } = get()
     // The simulated strap needs to know what the belt is doing.
     const feedHr = (ms: number) => {
-      if (heartRateSource instanceof SimulatedHeartRate) {
-        heartRateSource.feed(treadmill.actualSpeedMph, treadmill.actualInclinePct, ms)
-      }
+      heartRateSource.simulatedSource?.feed(treadmill.actualSpeedMph, treadmill.actualInclinePct, ms)
     }
 
     tickStartCountdown(realDt)
