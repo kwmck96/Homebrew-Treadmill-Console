@@ -11,6 +11,7 @@ import {
   createRun,
   editStep,
   holdForResume,
+  inHrGrace,
   noteManualTargets,
   type PlanRun,
   skipStep,
@@ -282,18 +283,35 @@ describe('HR auto-advance', () => {
   })
   const work = step({ kind: 'work', on: true, speedMph: 10, duration: { kind: 'time', seconds: 30 } })
 
-  it('advances 5 s after HR reaches the target, plus the wind-up, arriving at speed', () => {
+  it('advances 5 s after the 3 s average reaches the target, plus the wind-up, arriving at speed', () => {
     const belt = new Belt()
     belt.actual = { speedMph: 2.5, inclinePct: 0 }
     belt.target = belt.actual
-    // HR falls 170 → 110 over 60 s: reaches 120 at 50 s.
+    // HR falls 170 → 110 over 60 s: the reading reaches 120 at 50 s, the
+    // 3 s average (which trails by 1.5 s) at 51.5 s.
     const { run, log } = driveHr(createRun('t', [restHr, work]), belt, 70, (t) => 170 - t)
     const next = log.find((l) => l.index === 1)!
-    // 50 s + 5 s + wind-up 2.5 → 10 mph at 2 mph/s = 3.75 s. The rest's clock starts on tick 2.
-    expect(next.t / 1000).toBeGreaterThan(58.5)
-    expect(next.t / 1000).toBeLessThan(59.2)
+    // 51.5 s + 5 s + wind-up 2.5 → 10 mph at 2 mph/s = 3.75 s.
+    expect(next.t / 1000).toBeGreaterThan(59.9)
+    expect(next.t / 1000).toBeLessThan(60.7)
     expect(run.results[0].endedOnHr).toBe(true)
     expect(belt.actual.speedMph).toBeCloseTo(10, 1)
+  })
+
+  it('ignores a one-second blip below the target', () => {
+    const belt = new Belt()
+    // Steady 140 with a 1 s dropout-style blip to 100 at 20 s.
+    const { log } = driveHr(createRun('t', [restHr, work]), belt, 40, (t) => (t >= 20 && t < 21 ? 100 : 140))
+    expect(log.some((l) => l.index === 1)).toBe(false)
+  })
+
+  it('needs 3 s of continuous readings: a dropout restarts the average', () => {
+    const belt = new Belt()
+    // Below target from 10 s, but the strap drops every 2.5 s for a moment.
+    const { log } = driveHr(createRun('t', [restHr, work]), belt, 40, (t) =>
+      t >= 10 && t % 2.5 < 0.15 ? null : t >= 10 ? 110 : 150,
+    )
+    expect(log.some((l) => l.index === 1)).toBe(false)
   })
 
   it('a dropped strap runs the rest to its full (maximum) duration', () => {
@@ -324,6 +342,19 @@ describe('HR coaching', () => {
   it('rest: below target is good', () => {
     expect(hrCoaching(rest, 100)?.status).toBe('in')
     expect(hrCoaching(rest, 140)?.status).toBe('high')
+  })
+  it('first 30 s of a rep: "HR rising" instead of "Too Low"; Too High still shows', () => {
+    expect(hrCoaching(rep, 140, true)).toMatchObject({ status: 'rising', label: 'HR rising' })
+    expect(hrCoaching(rep, 170, true)?.status).toBe('high')
+  })
+  it('grace runs 30 s from the rep start and restarts after a resume', () => {
+    const belt = new Belt()
+    let { run } = drive(createRun('t', [{ ...rep, duration: { kind: 'time', seconds: 120 } }]), belt, 25)
+    expect(inHrGrace(run)).toBe(true)
+    ;({ run } = drive(run, belt, 10))
+    expect(inHrGrace(run)).toBe(false)
+    run = holdForResume(run)
+    expect(inHrGrace(run)).toBe(true)
   })
   it('no strap; no target', () => {
     expect(hrCoaching(rep, null)?.status).toBe('noSignal')

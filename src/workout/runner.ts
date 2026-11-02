@@ -23,6 +23,10 @@ export const RESUME_COUNTDOWN_MS = 3000
 export const COMPLETE_COUNTDOWN_MS = 5000
 /** HR auto-advance: the wind-up into the next rep starts this long after HR reaches the target. */
 export const HR_ADVANCE_DELAY_MS = 5000
+/** HR auto-advance compares a rolling average over this window, so one-second blips don't count. */
+export const HR_AVERAGE_WINDOW_MS = 3000
+/** HR reps: "HR rising" instead of "Too Low" for this long after the rep starts (or resumes). */
+export const HR_GRACE_MS = 30_000
 /** Give up waiting for the belt to reach an on step's speed after this. */
 const REACH_TIMEOUT_MS = 30_000
 const SPEED_TOLERANCE_MPH = 0.05
@@ -80,6 +84,14 @@ export interface PlanRun {
    * Optional so runs saved before phase 3 still load.
    */
   hrEndAtMs?: number | null
+  /**
+   * Heart-rate readings in the current step, step time and duration, for
+   * the rolling average. Cleared when the signal drops, so the average
+   * always covers continuous readings.
+   */
+  hrWindow?: { t: number; dt: number; bpm: number }[]
+  /** Step time the "HR rising" grace period counts from (rep start or resume). */
+  hrGraceFromMs?: number
 }
 
 export interface Targets {
@@ -135,6 +147,8 @@ export function createRun(name: string, steps: PlannedStep[], disableAutoLap = f
     applyToGroup: false,
     completeLeftMs: COMPLETE_COUNTDOWN_MS,
     hrEndAtMs: null,
+    hrWindow: [],
+    hrGraceFromMs: 0,
   }
 }
 
@@ -256,9 +270,14 @@ export function tickRun(run: PlanRun, ctx: TickContext): TickResult {
   // up into the next step (the pre-ramp below does the wind-up). The step's
   // duration stays the maximum, so a dropped strap just runs it to full time.
   const next = r.steps[r.index + 1]
-  if (step.advanceAtHr != null && r.hrEndAtMs == null && ctx.hrBpm != null && ctx.hrBpm <= step.advanceAtHr) {
-    const windUp = next && next.on && !step.on ? rampMs(stepTargets(step), stepTargets(next)) : 0
-    r.hrEndAtMs = r.stepMs + HR_ADVANCE_DELAY_MS + windUp
+  if (step.advanceAtHr != null && r.hrEndAtMs == null) {
+    r.hrWindow = trackHr(r.hrWindow ?? [], r.stepMs, ctx.dtMs, ctx.hrBpm ?? null)
+    const avg = rollingHr(r.hrWindow, r.stepMs)
+    if (avg != null && avg <= step.advanceAtHr) {
+      const windUp = next && next.on && !step.on ? rampMs(stepTargets(step), stepTargets(next)) : 0
+      r.hrEndAtMs = r.stepMs + HR_ADVANCE_DELAY_MS + windUp
+      r.hrWindow = []
+    }
   }
   if (r.hrEndAtMs != null && r.stepMs >= r.hrEndAtMs + r.extraMs) {
     return finishStep(r, ctx, false, true)
@@ -290,6 +309,8 @@ function beginStep(run: PlanRun, index: number, ctx: { elapsedMs: number; distan
     extraMs: 0,
     baseMetAtMs: null,
     hrEndAtMs: null,
+    hrWindow: [],
+    hrGraceFromMs: 0,
     applyToGroup: false,
     results: [...run.results, { index, startMs: ctx.elapsedMs, startM: ctx.distanceM, addedMs: 0 }],
   }
@@ -359,7 +380,14 @@ export function skipStep(run: PlanRun, ctx: { elapsedMs: number; distanceM: numb
 /** After a resume: 3-2-1 at walking speed, then the step's targets. */
 export function holdForResume(run: PlanRun, countdownMs = RESUME_COUNTDOWN_MS): PlanRun {
   if (run.phase !== 'running') return run
-  return { ...run, hold: { kind: 'countdown', leftMs: countdownMs }, preRamp: false }
+  // HR fell during the pause: restart the "HR rising" grace and the average.
+  return {
+    ...run,
+    hold: { kind: 'countdown', leftMs: countdownMs },
+    preRamp: false,
+    hrGraceFromMs: run.stepMs,
+    hrWindow: [],
+  }
 }
 
 /**
@@ -462,4 +490,38 @@ export function closeRun(run: PlanRun, ctx: { elapsedMs: number; distanceM: numb
   const last = results[results.length - 1]
   if (last && last.endMs == null) results[results.length - 1] = { ...last, endMs: ctx.elapsedMs, endM: ctx.distanceM }
   return { ...run, results, phase: 'ended', hold: null, preRamp: false }
+}
+
+/** Add a reading to the window and drop what's older than the window; a lost signal clears it. */
+export function trackHr(
+  window: { t: number; dt: number; bpm: number }[],
+  t: number,
+  dt: number,
+  bpm: number | null,
+): { t: number; dt: number; bpm: number }[] {
+  if (bpm == null) return []
+  return [...window, { t, dt, bpm }].filter((s) => s.t > t - HR_AVERAGE_WINDOW_MS)
+}
+
+/**
+ * Time-weighted average over the last 3 s, or null until there are 3 s of
+ * continuous readings.
+ */
+export function rollingHr(window: { t: number; dt: number; bpm: number }[], t: number): number | null {
+  if (!window.length) return null
+  const covered = t - (window[0].t - window[0].dt)
+  if (covered < HR_AVERAGE_WINDOW_MS - 1) return null
+  let sum = 0
+  let weight = 0
+  for (const s of window) {
+    sum += s.bpm * s.dt
+    weight += s.dt
+  }
+  return weight > 0 ? sum / weight : null
+}
+
+/** In the "HR rising" grace period at the start of an HR rep. */
+export function inHrGrace(run: PlanRun): boolean {
+  const step = currentStep(run)
+  return !!step?.on && run.started && run.stepMs - (run.hrGraceFromMs ?? 0) < HR_GRACE_MS
 }

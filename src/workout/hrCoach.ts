@@ -9,7 +9,7 @@
  */
 import type { PlannedStep } from '../plan/expand'
 
-export type HrStatus = 'low' | 'in' | 'high' | 'noSignal'
+export type HrStatus = 'low' | 'rising' | 'in' | 'high' | 'noSignal'
 
 export interface HrCoaching {
   status: HrStatus
@@ -27,11 +27,20 @@ export const HR_COACH_COLORS = {
   low: 'rgb(255 154 60)', // orange
   in: 'rgb(82 201 122)', // green
   high: 'rgb(240 72 78)', // red
+  rising: 'rgb(238 241 236)', // chalk: neutral, not a warning yet
   noSignal: 'rgb(143 166 189)', // mist
 } as const
 
-/** Coaching for the current step, or null when it has no HR target. */
-export function hrCoaching(step: PlannedStep | null | undefined, bpm: number | null): HrCoaching | null {
+/**
+ * Coaching for the current step, or null when it has no HR target.
+ * `inGrace`: the first 30 s of a rep (or after a resume), when HR is still
+ * climbing; below the range then reads "HR rising" instead of "Too Low".
+ */
+export function hrCoaching(
+  step: PlannedStep | null | undefined,
+  bpm: number | null,
+  inGrace = false,
+): HrCoaching | null {
   if (!step?.hrRange || (step.targetKind !== 'hr' && step.targetKind !== 'zone')) return null
   const { low, high } = step.hrRange
   const recovering = !step.on
@@ -41,7 +50,11 @@ export function hrCoaching(step: PlannedStep | null | undefined, bpm: number | n
     return { ...base, status: 'noSignal', label: 'No heart rate', color: HR_COACH_COLORS.noSignal }
   }
   if (bpm > high) return { ...base, status: 'high', label: 'Too High', color: HR_COACH_COLORS.high }
-  if (bpm < low && !recovering) return { ...base, status: 'low', label: 'Too Low', color: HR_COACH_COLORS.low }
+  if (bpm < low && !recovering) {
+    return inGrace
+      ? { ...base, status: 'rising', label: 'HR rising', color: HR_COACH_COLORS.rising }
+      : { ...base, status: 'low', label: 'Too Low', color: HR_COACH_COLORS.low }
+  }
   return { ...base, status: 'in', label: recovering ? 'Recovering' : 'On target', color: HR_COACH_COLORS.in }
 }
 
