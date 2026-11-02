@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { mphToMetersPerSec } from '../lib/units'
 import type { PlannedStep } from '../plan/expand'
 import { RAMP_RATES } from '../treadmill/rampRates'
+import { hrCoaching } from './hrCoach'
 import {
   addTime,
   applyToGroup,
@@ -10,6 +11,7 @@ import {
   createRun,
   editStep,
   holdForResume,
+  inHrGrace,
   noteManualTargets,
   type PlanRun,
   skipStep,
@@ -32,6 +34,7 @@ function step(p: Partial<PlannedStep> & Pick<PlannedStep, 'kind' | 'on'>): Plann
     inclinePct: 0,
     restOff: false,
     advanceAtHr: null,
+    zone: null,
     group: null,
     rep: null,
     set: null,
@@ -240,5 +243,121 @@ describe('workout runner', () => {
     const res = tickRun(run, { dtMs: 1000, realDtMs: 1000, distM: 0, actual: { speedMph: 0, inclinePct: 0 }, beltRunning: false, elapsedMs: 0, distanceM: 0 })
     expect(res.run).toBe(run)
     expect(res.command).toBeNull()
+  })
+})
+
+describe('HR auto-advance', () => {
+  /** Like drive(), with heart rate as a function of total elapsed seconds. */
+  function driveHr(run: PlanRun, belt: Belt, seconds: number, hr: (t: number) => number | null, state = { t: 0, d: 0 }) {
+    let r = run
+    const log: { t: number; index: number }[] = []
+    for (let i = 0; i < seconds * 10; i++) {
+      belt.move(100)
+      const distM = mphToMetersPerSec(belt.actual.speedMph) * 0.1
+      state.t += 100
+      state.d += distM
+      const res = tickRun(r, {
+        dtMs: 100,
+        realDtMs: 100,
+        distM,
+        actual: belt.actual,
+        beltRunning: true,
+        elapsedMs: state.t,
+        distanceM: state.d,
+        hrBpm: hr(state.t / 1000),
+      })
+      if (res.command) belt.target = res.command
+      if (res.split) log.push({ t: state.t, index: res.run.index })
+      r = res.run
+    }
+    return { run: r, log, state }
+  }
+  const restHr = step({
+    kind: 'rest',
+    on: false,
+    speedMph: 2.5,
+    duration: { kind: 'time', seconds: 120 },
+    targetKind: 'hr',
+    hrRange: { low: 115, high: 125 },
+    advanceAtHr: 120,
+  })
+  const work = step({ kind: 'work', on: true, speedMph: 10, duration: { kind: 'time', seconds: 30 } })
+
+  it('advances 5 s after the 3 s average reaches the target, plus the wind-up, arriving at speed', () => {
+    const belt = new Belt()
+    belt.actual = { speedMph: 2.5, inclinePct: 0 }
+    belt.target = belt.actual
+    // HR falls 170 → 110 over 60 s: the reading reaches 120 at 50 s, the
+    // 3 s average (which trails by 1.5 s) at 51.5 s.
+    const { run, log } = driveHr(createRun('t', [restHr, work]), belt, 70, (t) => 170 - t)
+    const next = log.find((l) => l.index === 1)!
+    // 51.5 s + 5 s + wind-up 2.5 → 10 mph at 2 mph/s = 3.75 s.
+    expect(next.t / 1000).toBeGreaterThan(59.9)
+    expect(next.t / 1000).toBeLessThan(60.7)
+    expect(run.results[0].endedOnHr).toBe(true)
+    expect(belt.actual.speedMph).toBeCloseTo(10, 1)
+  })
+
+  it('ignores a one-second blip below the target', () => {
+    const belt = new Belt()
+    // Steady 140 with a 1 s dropout-style blip to 100 at 20 s.
+    const { log } = driveHr(createRun('t', [restHr, work]), belt, 40, (t) => (t >= 20 && t < 21 ? 100 : 140))
+    expect(log.some((l) => l.index === 1)).toBe(false)
+  })
+
+  it('needs 3 s of continuous readings: a dropout restarts the average', () => {
+    const belt = new Belt()
+    // Below target from 10 s, but the strap drops every 2.5 s for a moment.
+    const { log } = driveHr(createRun('t', [restHr, work]), belt, 40, (t) =>
+      t >= 10 && t % 2.5 < 0.15 ? null : t >= 10 ? 110 : 150,
+    )
+    expect(log.some((l) => l.index === 1)).toBe(false)
+  })
+
+  it('a dropped strap runs the rest to its full (maximum) duration', () => {
+    const belt = new Belt()
+    const { log, run } = driveHr(createRun('t', [restHr, work]), belt, 125, () => null)
+    expect(log.find((l) => l.index === 1)!.t / 1000).toBeCloseTo(120.2, 0)
+    expect(run.results[0].endedOnHr).toBeUndefined()
+  })
+
+  it('+15 s still adds rest after HR is reached', () => {
+    const belt = new Belt()
+    let { run, state } = driveHr(createRun('t', [restHr, work]), belt, 52, (t) => 170 - t)
+    expect(run.hrEndAtMs).not.toBeNull()
+    run = addTime(run, 15_000)
+    const { log } = driveHr(run, belt, 30, (t) => 170 - t, state)
+    expect(log.find((l) => l.index === 1)!.t / 1000).toBeGreaterThan(73)
+  })
+})
+
+describe('HR coaching', () => {
+  const rep = step({ kind: 'work', on: true, targetKind: 'zone', hrRange: { low: 150, high: 163 }, zone: 3 })
+  const rest = step({ kind: 'rest', on: false, targetKind: 'hr', hrRange: { low: 115, high: 125 } })
+  it('reps: low / in / high, with the zone number', () => {
+    expect(hrCoaching(rep, 140)).toMatchObject({ status: 'low', label: 'Too Low', zoneLabel: 'Zone 3' })
+    expect(hrCoaching(rep, 155)?.status).toBe('in')
+    expect(hrCoaching(rep, 170)).toMatchObject({ status: 'high', label: 'Too High' })
+  })
+  it('rest: below target is good', () => {
+    expect(hrCoaching(rest, 100)?.status).toBe('in')
+    expect(hrCoaching(rest, 140)?.status).toBe('high')
+  })
+  it('first 30 s of a rep: "HR rising" instead of "Too Low"; Too High still shows', () => {
+    expect(hrCoaching(rep, 140, true)).toMatchObject({ status: 'rising', label: 'HR rising' })
+    expect(hrCoaching(rep, 170, true)?.status).toBe('high')
+  })
+  it('grace runs 30 s from the rep start and restarts after a resume', () => {
+    const belt = new Belt()
+    let { run } = drive(createRun('t', [{ ...rep, duration: { kind: 'time', seconds: 120 } }]), belt, 25)
+    expect(inHrGrace(run)).toBe(true)
+    ;({ run } = drive(run, belt, 10))
+    expect(inHrGrace(run)).toBe(false)
+    run = holdForResume(run)
+    expect(inHrGrace(run)).toBe(true)
+  })
+  it('no strap; no target', () => {
+    expect(hrCoaching(rep, null)?.status).toBe('noSignal')
+    expect(hrCoaching(step({ kind: 'work', on: true }), 150)).toBeNull()
   })
 })

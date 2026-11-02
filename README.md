@@ -2,7 +2,7 @@
 
 A custom touchscreen console for a Precor TRM 885 treadmill, replacing the stock P80 workout screen. It runs on an Amazon Fire HD 10 (11th gen) in landscape.
 
-**Status: v0.4, simulator only.** The app runs against a simulated treadmill. The real hardware driver (an ESP32 bridge on the console data cable) comes after the data-cable capture. The full requirements live in the Claude project doc `treadmill-app-requirements.md`; requirement IDs (M3, S4, …) in code comments refer to it.
+**Status: v0.5, simulator only.** The app runs against a simulated treadmill. The real hardware driver (an ESP32 bridge on the console data cable) comes after the data-cable capture. The full requirements live in the Claude project doc `treadmill-app-requirements.md`; requirement IDs (M3, S4, …) in code comments refer to it.
 
 > **Safety:** the on-screen Stop button is a convenience. The real stops are the lanyard and physical buttons wired to the controller (requirements S1, S5), and hard speed/incline limits live in the controller firmware (S3). Nothing in this app is a safety boundary.
 
@@ -65,7 +65,13 @@ Three views, switched with the tabs in the status bar: Control Center, Charts an
 - **Pause** freezes the step clock. **Resume** starts the belt at walking speed, counts down 3-2-1, then goes to the step's settings; a rep's clock restarts once the belt is back up to speed.
 - **End:** after the last step the belt holds its speed and "Workout complete" shows **End** (fills over 5 s, then ends the workout) and **Keep running** (back to a free run, starting a new lap).
 - The **summary** adds a target-vs-actual table per step (time, distance, pace, average HR; skipped steps and added recovery marked). The plan, as run, is saved with the workout. A reload mid-workout restores it paused at the same step.
-- HR, zone and effort steps run at their starting pace for now; coaching, HR auto-advance and step-change beeps come in phase 3.
+- **Heart-rate coaching** on HR and zone steps (they run at their starting pace; the app doesn't change speed for you):
+  - In a rep, the heart rate turns orange **Too Low** below the range, green when in it, and red **Too High** above it. For the first 30 s of a rep (and 30 s after a resume) a low heart rate reads **HR rising** in white instead of Too Low, since HR lags the speed change; Too High still shows straight away. In a rest or recovery with an HR target, anything at or below the range is good (green, "Recovering").
+  - It shows on the HR tile on Charts ("Too High · Z2"), the Heart Rate field on Control Center ("Too High · Zone 2 · 136–150"), and as a chip in the banner. Zone targets show their zone number.
+  - Effort (RPE) steps show their target and nothing more.
+- **HR auto-advance:** a rest or recovery set to "start the next rep at this heart rate" ends 5 s after the rolling 3-second average HR falls to the target (so a one-second blip doesn't count, and a dropout restarts the average), plus the wind-up so the rep starts at speed. The banner reads "3:15 max · next at ≤ 130 bpm" until then. Its duration is the maximum, so if the strap drops it simply runs to full time; the banner says "No heart rate: full rest". +15s / +30s still add rest. The summary marks these steps "(HR advance)".
+- **Lost strap** on any HR step: the belt keeps its speed and the banner shows "No heart rate".
+- **Step changes:** a full-width flash with the new step's name and target, a beep each second for the last 3 seconds of a step, and a higher beep when the next one starts. **Workout sounds** in Settings turns the beeps off.
 
 **Both**
 - **Preset laps wait for the ramp.** When a preset tap splits a lap, the speed/incline change goes out immediately but the lap waits. An overlay shows the estimated speed and incline climbing to the new targets, then counts down 3-2-1 and starts the lap.
@@ -123,13 +129,14 @@ src/
                store.ts: wires driver + engine + storage together; owns the timer loop
                persistence.ts: IndexedDB storage; fields.ts: the data-field definitions
   settings/    User settings (presets, units, fields), saved in localStorage
-  lib/units.ts Unit conversion and formatting
+  lib/units.ts Unit conversion and formatting; lib/beeper.ts the workout beeps (Web Audio)
   heartrate/   HeartRateSource interface and the simulated strap (model.ts is the physiology)
   charts/      Chart math: visible time window, panning, y-scales, thinning long workouts,
                and inspect.ts (look-back gestures and point-in-time readings)
   plan/        Structured workouts: types, element defaults, expand (blocks → steps), estimates,
                the builder draft store and the IndexedDB library
-               (workout/runner.ts steps through a plan while it runs: pure, like engine.ts)
+               (workout/runner.ts steps through a plan while it runs and workout/hrCoach.ts
+               decides Too Low / Too High: both pure, like engine.ts)
   ui/          React components; ui/charts/ the Charts view, ui/builder/ the Workout Builder,
                ui/workout/ the workout-mode banner, controls and step sheet
 ```
@@ -164,4 +171,4 @@ Internal units: speed in mph and incline in % (the treadmill's native control un
 
 ## Not built yet
 
-Workout builder phase 3 (HR/zone/effort coaching, HR auto-advance, step-change flash and beeps), diagnostics screen (D1/D2), workout history list, a real Bluetooth heart-rate strap (H1; simulated for now), calibration factor (H2), music controls (H3), Capacitor APK packaging, and the real treadmill driver.
+Diagnostics screen (D1/D2), workout history list, a real Bluetooth heart-rate strap (H1; simulated for now), calibration factor (H2), music controls (H3), Capacitor APK packaging, and the real treadmill driver.

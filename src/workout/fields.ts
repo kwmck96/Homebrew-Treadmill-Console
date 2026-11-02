@@ -17,6 +17,7 @@ import {
 } from '../lib/units'
 import { hrColor } from '../lib/hrColor'
 import { averageHr, currentLap, lapAverageHr, lapTotals } from './engine'
+import type { HrCoaching } from './hrCoach'
 import type { WorkoutRecord } from './types'
 
 export interface FieldContext {
@@ -26,6 +27,8 @@ export interface FieldContext {
   /** Latest heart rate, or null with no strap connected. */
   heartRateBpm: number | null
   unit: DistanceUnit
+  /** Workout mode, HR or zone step: Too Low / Too High coaching. */
+  hrCoaching?: HrCoaching | null
 }
 
 export interface FieldValue {
@@ -33,6 +36,8 @@ export interface FieldValue {
   unit?: string
   /** Optional colour for the value (heart rate uses its colour scale). */
   color?: string
+  /** Small coloured tag beside the label, e.g. "Too High · 150–162". */
+  badge?: { text: string; color: string }
 }
 
 export interface FieldDef {
@@ -153,10 +158,11 @@ const FIELD_DEFS = [
   {
     id: 'heartRate',
     label: 'Heart Rate',
-    compute: ({ heartRateBpm }) => ({
+    compute: ({ heartRateBpm, hrCoaching }) => ({
       value: formatBpm(heartRateBpm),
       unit: 'bpm',
-      color: hrColor(heartRateBpm),
+      color: hrCoaching ? hrCoaching.color : hrColor(heartRateBpm),
+      badge: hrCoaching ? { text: coachingBadge(hrCoaching), color: hrCoaching.color } : undefined,
     }),
   },
   {
@@ -185,3 +191,9 @@ export const FIELDS: readonly FieldDef[] = FIELD_DEFS
 export const FIELDS_BY_ID: Record<string, FieldDef> = Object.fromEntries(
   FIELD_DEFS.map((f) => [f.id, f]),
 )
+
+/** "Too High · Zone 3 · 150–162", or short: "Too High · Z3". */
+export function coachingBadge(c: HrCoaching, short = false): string {
+  if (short) return [c.status === 'noSignal' ? 'No HR' : c.label, c.zoneLabel?.replace('Zone ', 'Z')].filter(Boolean).join(' · ')
+  return [c.label, c.zoneLabel, `${c.low}–${c.high}`].filter(Boolean).join(' · ')
+}

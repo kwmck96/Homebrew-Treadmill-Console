@@ -83,6 +83,7 @@ export function SummaryScreen({ record, onDone }: { record: WorkoutRecord; onDon
                     <td>
                       {step?.label}
                       {r.skipped && ' (skipped)'}
+                      {r.endedOnHr && ' (HR advance)'}
                       {r.addedMs > 0 && ` (+${Math.round(r.addedMs / 1000)}s)`}
                     </td>
                     <td>{step ? describeStepTarget(step, unit) : ''}</td>

@@ -255,3 +255,76 @@
   background: var(--go);
   color: #04210f;
 }
+
+/* ---- step-change flash ---- */
+
+.flash {
+  position: fixed;
+  top: 4.6em;
+  left: var(--gap);
+  right: var(--gap);
+  z-index: 65;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 1em;
+  padding: 0.6em 1em;
+  border-radius: var(--radius-lg);
+  background: var(--speed);
+  color: var(--speed-ink);
+  box-shadow: 0 1em 2.5em rgb(0 0 0 / 0.5);
+  pointer-events: none;
+  white-space: nowrap;
+  animation: flashInOut 2600ms ease-out forwards;
+}
+
+.flash[data-kind='off'] {
+  background: var(--grade);
+  color: var(--grade-ink);
+}
+
+.flash[data-kind='done'] {
+  background: var(--go);
+  color: #04210f;
+}
+
+.flashLabel {
+  font-size: 2.2em;
+  font-weight: 800;
+}
+
+.flashDetail {
+  font-size: 1.4em;
+  font-weight: 650;
+}
+
+@keyframes flashInOut {
+  0% {
+    opacity: 0;
+    transform: translateY(-0.5em) scale(0.98);
+  }
+  8% {
+    opacity: 1;
+    transform: none;
+  }
+  /* Two quick pulses so it catches the eye mid-stride. */
+  16% {
+    filter: brightness(1.25);
+  }
+  24% {
+    filter: none;
+  }
+  32% {
+    filter: brightness(1.25);
+  }
+  40% {
+    filter: none;
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    visibility: hidden;
+  }
+}

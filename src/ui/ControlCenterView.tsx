@@ -10,6 +10,7 @@ import styles from './ControlCenterView.module.css'
 import { PauseBanner } from './PauseBanner'
 import { PendingLapOverlay } from './PendingLapOverlay'
 import laneStyles from './Lane.module.css'
+import { useHrCoaching } from './workout/useHrCoaching'
 import { WorkoutBanner } from './workout/WorkoutBanner'
 import { AddRecoveryButton, ApplyPrompt, SkipStepButton, WorkoutCompleteCard } from './workout/WorkoutMode'
 
@@ -39,6 +40,7 @@ export function ControlCenterView() {
   // Workout mode (exception to M3): +15s / +30s Recovery and Skip This Step
   // replace the speed presets while a structured workout runs.
   const workoutMode = useConsole((s) => activeRun(s.workout) !== null)
+  const coaching = useHrCoaching()
 
   const unit = settings.distanceUnit
   const running = workout?.status === 'running'
@@ -126,6 +128,7 @@ export function ControlCenterView() {
               actualInclinePct: treadmill.actualInclinePct,
               heartRateBpm,
               unit,
+              hrCoaching: coaching,
             }}
           />
           <PendingLapOverlay />
