@@ -27,6 +27,8 @@ export interface PlannedStep {
   targetKind: TargetKind | 'none'
   /** Accepted HR range for HR and zone targets. */
   hrRange: { low: number; high: number } | null
+  /** Target zone number (1–5) for computed zone targets; null otherwise. */
+  zone?: number | null
   rpe: number | null
   inclinePct: number
   /** Off-treadmill rest: time runs, distance doesn't. */
@@ -88,6 +90,7 @@ function fromStep(
     hrRange:
       s.targetKind === 'hr' ? hrTargetRange(s.hrBpm) : s.targetKind === 'zone' ? zoneRange(s.zone, hr) : null,
     rpe: s.targetKind === 'rpe' ? s.rpe : null,
+    zone: s.targetKind === 'zone' && s.zone.mode === 'computed' ? s.zone.zone : null,
     inclinePct: s.inclinePct,
     restOff: false,
     advanceAtHr: recoveryish && s.targetKind === 'hr' && s.advanceOnHr ? s.hrBpm : null,

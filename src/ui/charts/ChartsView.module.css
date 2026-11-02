@@ -185,3 +185,9 @@
   right: 0;
   bottom: calc(100% + var(--gap));
 }
+
+.metricNote[data-coach='true'] {
+  color: var(--night);
+  font-weight: 700;
+  white-space: nowrap;
+}

@@ -21,6 +21,8 @@ import { RAMP_RATES } from '../treadmill/rampRates'
 
 export const RESUME_COUNTDOWN_MS = 3000
 export const COMPLETE_COUNTDOWN_MS = 5000
+/** HR auto-advance: the wind-up into the next rep starts this long after HR reaches the target. */
+export const HR_ADVANCE_DELAY_MS = 5000
 /** Give up waiting for the belt to reach an on step's speed after this. */
 const REACH_TIMEOUT_MS = 30_000
 const SPEED_TOLERANCE_MPH = 0.05
@@ -42,6 +44,8 @@ export interface StepResult {
   /** Time added with +15 s / +30 s. */
   addedMs: number
   skipped?: boolean
+  /** Ended early by HR auto-advance. */
+  endedOnHr?: boolean
 }
 
 export interface PlanRun {
@@ -70,6 +74,12 @@ export interface PlanRun {
   /** "Apply to all intervals in this step?" was answered Yes for this rep. */
   applyToGroup: boolean
   completeLeftMs: number
+  /**
+   * HR auto-advance: step time at which the step now ends (HR reached the
+   * target, plus 5 s, plus the ramp into the next rep). Null until then.
+   * Optional so runs saved before phase 3 still load.
+   */
+  hrEndAtMs?: number | null
 }
 
 export interface Targets {
@@ -90,6 +100,8 @@ export interface TickContext {
   /** Workout totals after this tick, for step results. */
   elapsedMs: number
   distanceM: number
+  /** Latest heart rate, or null (no strap or no contact). */
+  hrBpm?: number | null
 }
 
 export interface TickResult {
@@ -122,6 +134,7 @@ export function createRun(name: string, steps: PlannedStep[], disableAutoLap = f
     preRamp: false,
     applyToGroup: false,
     completeLeftMs: COMPLETE_COUNTDOWN_MS,
+    hrEndAtMs: null,
   }
 }
 
@@ -154,9 +167,13 @@ function atTargets(actual: Targets, target: Targets): boolean {
 export function stepRemaining(run: PlanRun): { ms: number } | { m: number; extraMs: number } {
   const step = run.steps[run.index]
   if (!step) return { ms: 0 }
+  // HR reached on an auto-advance step: it ends at a known time (or at its
+  // planned duration, if that comes first).
+  const hrLeft = run.hrEndAtMs != null ? Math.max(0, run.hrEndAtMs + run.extraMs - run.stepMs) : Infinity
   if (step.duration.kind === 'time') {
-    return { ms: Math.max(0, step.duration.seconds * 1000 + run.extraMs - run.stepMs) }
+    return { ms: Math.min(hrLeft, Math.max(0, step.duration.seconds * 1000 + run.extraMs - run.stepMs)) }
   }
+  if (hrLeft !== Infinity) return { ms: hrLeft }
   if (run.baseMetAtMs == null) {
     return { m: Math.max(0, step.duration.meters - run.stepM), extraMs: run.extraMs }
   }
@@ -175,7 +192,7 @@ export function stepProgress(run: PlanRun): number {
 }
 
 /** Estimated ms until the step ends, at the current speed for distance steps. */
-function remainingMs(run: PlanRun, speedMph: number): number {
+export function stepRemainingMs(run: PlanRun, speedMph: number): number {
   const left = stepRemaining(run)
   if ('ms' in left) return left.ms
   return (left.m / Math.max(mphToMetersPerSec(speedMph), 0.2)) * 1000 + left.extraMs
@@ -235,10 +252,21 @@ export function tickRun(run: PlanRun, ctx: TickContext): TickResult {
     return finishStep(r, ctx, false)
   }
 
-  // Pre-ramp: ramp into an on step during the end of the off step before it.
+  // HR auto-advance: once HR is at or below the target, wait 5 s, then wind
+  // up into the next step (the pre-ramp below does the wind-up). The step's
+  // duration stays the maximum, so a dropped strap just runs it to full time.
   const next = r.steps[r.index + 1]
+  if (step.advanceAtHr != null && r.hrEndAtMs == null && ctx.hrBpm != null && ctx.hrBpm <= step.advanceAtHr) {
+    const windUp = next && next.on && !step.on ? rampMs(stepTargets(step), stepTargets(next)) : 0
+    r.hrEndAtMs = r.stepMs + HR_ADVANCE_DELAY_MS + windUp
+  }
+  if (r.hrEndAtMs != null && r.stepMs >= r.hrEndAtMs + r.extraMs) {
+    return finishStep(r, ctx, false, true)
+  }
+
+  // Pre-ramp: ramp into an on step during the end of the off step before it.
   if (next && next.on && !step.on) {
-    const remaining = remainingMs(r, ctx.actual.speedMph)
+    const remaining = stepRemainingMs(r, ctx.actual.speedMph)
     if (!r.preRamp && remaining <= rampMs(ctx.actual, stepTargets(next))) {
       r.preRamp = true
       result.command = stepTargets(next)
@@ -261,12 +289,18 @@ function beginStep(run: PlanRun, index: number, ctx: { elapsedMs: number; distan
     stepM: 0,
     extraMs: 0,
     baseMetAtMs: null,
+    hrEndAtMs: null,
     applyToGroup: false,
     results: [...run.results, { index, startMs: ctx.elapsedMs, startM: ctx.distanceM, addedMs: 0 }],
   }
 }
 
-function finishStep(run: PlanRun, ctx: { elapsedMs: number; distanceM: number }, skipped: boolean): TickResult {
+function finishStep(
+  run: PlanRun,
+  ctx: { elapsedMs: number; distanceM: number },
+  skipped: boolean,
+  onHr = false,
+): TickResult {
   let r = { ...run }
   const result: TickResult = { run: r, command: null, split: false, completed: false, autoEnd: false }
   if (!r.started) r = beginStep(r, r.index, ctx)
@@ -277,6 +311,7 @@ function finishStep(run: PlanRun, ctx: { elapsedMs: number; distanceM: number },
     endMs: ctx.elapsedMs,
     endM: ctx.distanceM,
     ...(skipped ? { skipped: true } : {}),
+    ...(onHr ? { endedOnHr: true } : {}),
   }
   r.results = results
   if (r.applyToGroup) r.steps = applyToGroup(r.steps, r.index)

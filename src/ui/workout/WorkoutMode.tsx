@@ -1,5 +1,7 @@
 import { useConsole, activeRun, APPLY_FILL_MS } from '../../workout/store'
 import { canAddTime, COMPLETE_COUNTDOWN_MS } from '../../workout/runner'
+import { useSettings } from '../../settings/store'
+import { describeStepTarget } from './runText'
 import styles from './WorkoutMode.module.css'
 
 /** Full-screen 5-4-3-2-1 after confirming Start workout. */
@@ -124,6 +126,30 @@ export function WorkoutCompleteCard() {
           </button>
         </div>
       </section>
+    </div>
+  )
+}
+
+/**
+ * Full-width flash at each step change: the new step's name and target,
+ * fading out after a couple of seconds. Never takes touches.
+ */
+export function StepFlash() {
+  const flash = useConsole((s) => s.stepFlash)
+  const run = useConsole((s) => s.workout?.run)
+  const unit = useSettings((s) => s.distanceUnit)
+  if (!flash || !run) return null
+  const step = flash.stepIndex >= 0 ? run.steps[flash.stepIndex] : null
+  return (
+    <div
+      key={flash.id}
+      className={styles.flash}
+      data-kind={step ? (step.on ? 'on' : 'off') : 'done'}
+      role="status"
+      aria-live="assertive"
+    >
+      <span className={styles.flashLabel}>{step ? step.label : 'Workout complete'}</span>
+      <span className={`${styles.flashDetail} num`}>{step ? describeStepTarget(step, unit) : run.name}</span>
     </div>
   )
 }

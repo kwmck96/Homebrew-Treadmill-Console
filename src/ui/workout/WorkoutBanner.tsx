@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useSettings } from '../../settings/store'
+import { stepNeedsHr } from '../../workout/hrCoach'
 import { stepProgress } from '../../workout/runner'
 import { activeRun, useConsole } from '../../workout/store'
 import { describeStepTarget, holdText, nextText, remainingText } from './runText'
 import styles from './WorkoutBanner.module.css'
+import { useHrCoaching } from './useHrCoaching'
 import { WorkoutSheet } from './WorkoutSheet'
 
 /**
@@ -14,6 +16,8 @@ export function WorkoutBanner({ compact = false }: { compact?: boolean }) {
   const run = useConsole((s) => activeRun(s.workout))
   const paused = useConsole((s) => s.workout?.status === 'paused')
   const unit = useSettings((s) => s.distanceUnit)
+  const bpm = useConsole((s) => s.heartRate.bpm)
+  const coaching = useHrCoaching()
   const [open, setOpen] = useState(false)
   if (!run) return null
 
@@ -45,6 +49,17 @@ export function WorkoutBanner({ compact = false }: { compact?: boolean }) {
         </span>
         {next && <span className={styles.next}>{compact ? '' : '· '}Next: {next}</span>}
         {(hold || paused) && <span className={styles.hold}>{paused ? 'Paused' : hold}</span>}
+        {step && stepNeedsHr(step) && bpm == null ? (
+          <span className={styles.warn}>
+            {step.advanceAtHr != null ? 'No heart rate: full rest' : 'No heart rate'}
+          </span>
+        ) : (
+          coaching && (
+            <span className={`${styles.coach} num`} style={{ background: coaching.color }}>
+              {bpm} bpm · {coaching.label}
+            </span>
+          )
+        )}
         {step && <span className={`${styles.target} num`}>{describeStepTarget(step, unit)}</span>}
         <span className={styles.edit} aria-hidden="true">
           All steps ›
