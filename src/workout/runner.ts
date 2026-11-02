@@ -21,6 +21,12 @@ import { RAMP_RATES } from '../treadmill/rampRates'
 
 export const RESUME_COUNTDOWN_MS = 3000
 export const COMPLETE_COUNTDOWN_MS = 5000
+/** HR auto-advance: the wind-up into the next rep starts this long after HR reaches the target. */
+export const HR_ADVANCE_DELAY_MS = 5000
+/** HR auto-advance compares a rolling average over this window, so one-second blips don't count. */
+export const HR_AVERAGE_WINDOW_MS = 3000
+/** HR reps: "HR rising" instead of "Too Low" for this long after the rep starts (or resumes). */
+export const HR_GRACE_MS = 30_000
 /** Give up waiting for the belt to reach an on step's speed after this. */
 const REACH_TIMEOUT_MS = 30_000
 const SPEED_TOLERANCE_MPH = 0.05
@@ -42,6 +48,8 @@ export interface StepResult {
   /** Time added with +15 s / +30 s. */
   addedMs: number
   skipped?: boolean
+  /** Ended early by HR auto-advance. */
+  endedOnHr?: boolean
 }
 
 export interface PlanRun {
@@ -70,6 +78,20 @@ export interface PlanRun {
   /** "Apply to all intervals in this step?" was answered Yes for this rep. */
   applyToGroup: boolean
   completeLeftMs: number
+  /**
+   * HR auto-advance: step time at which the step now ends (HR reached the
+   * target, plus 5 s, plus the ramp into the next rep). Null until then.
+   * Optional so runs saved before phase 3 still load.
+   */
+  hrEndAtMs?: number | null
+  /**
+   * Heart-rate readings in the current step, step time and duration, for
+   * the rolling average. Cleared when the signal drops, so the average
+   * always covers continuous readings.
+   */
+  hrWindow?: { t: number; dt: number; bpm: number }[]
+  /** Step time the "HR rising" grace period counts from (rep start or resume). */
+  hrGraceFromMs?: number
 }
 
 export interface Targets {
@@ -90,6 +112,8 @@ export interface TickContext {
   /** Workout totals after this tick, for step results. */
   elapsedMs: number
   distanceM: number
+  /** Latest heart rate, or null (no strap or no contact). */
+  hrBpm?: number | null
 }
 
 export interface TickResult {
@@ -122,6 +146,9 @@ export function createRun(name: string, steps: PlannedStep[], disableAutoLap = f
     preRamp: false,
     applyToGroup: false,
     completeLeftMs: COMPLETE_COUNTDOWN_MS,
+    hrEndAtMs: null,
+    hrWindow: [],
+    hrGraceFromMs: 0,
   }
 }
 
@@ -154,9 +181,13 @@ function atTargets(actual: Targets, target: Targets): boolean {
 export function stepRemaining(run: PlanRun): { ms: number } | { m: number; extraMs: number } {
   const step = run.steps[run.index]
   if (!step) return { ms: 0 }
+  // HR reached on an auto-advance step: it ends at a known time (or at its
+  // planned duration, if that comes first).
+  const hrLeft = run.hrEndAtMs != null ? Math.max(0, run.hrEndAtMs + run.extraMs - run.stepMs) : Infinity
   if (step.duration.kind === 'time') {
-    return { ms: Math.max(0, step.duration.seconds * 1000 + run.extraMs - run.stepMs) }
+    return { ms: Math.min(hrLeft, Math.max(0, step.duration.seconds * 1000 + run.extraMs - run.stepMs)) }
   }
+  if (hrLeft !== Infinity) return { ms: hrLeft }
   if (run.baseMetAtMs == null) {
     return { m: Math.max(0, step.duration.meters - run.stepM), extraMs: run.extraMs }
   }
@@ -175,7 +206,7 @@ export function stepProgress(run: PlanRun): number {
 }
 
 /** Estimated ms until the step ends, at the current speed for distance steps. */
-function remainingMs(run: PlanRun, speedMph: number): number {
+export function stepRemainingMs(run: PlanRun, speedMph: number): number {
   const left = stepRemaining(run)
   if ('ms' in left) return left.ms
   return (left.m / Math.max(mphToMetersPerSec(speedMph), 0.2)) * 1000 + left.extraMs
@@ -235,10 +266,26 @@ export function tickRun(run: PlanRun, ctx: TickContext): TickResult {
     return finishStep(r, ctx, false)
   }
 
-  // Pre-ramp: ramp into an on step during the end of the off step before it.
+  // HR auto-advance: once HR is at or below the target, wait 5 s, then wind
+  // up into the next step (the pre-ramp below does the wind-up). The step's
+  // duration stays the maximum, so a dropped strap just runs it to full time.
   const next = r.steps[r.index + 1]
+  if (step.advanceAtHr != null && r.hrEndAtMs == null) {
+    r.hrWindow = trackHr(r.hrWindow ?? [], r.stepMs, ctx.dtMs, ctx.hrBpm ?? null)
+    const avg = rollingHr(r.hrWindow, r.stepMs)
+    if (avg != null && avg <= step.advanceAtHr) {
+      const windUp = next && next.on && !step.on ? rampMs(stepTargets(step), stepTargets(next)) : 0
+      r.hrEndAtMs = r.stepMs + HR_ADVANCE_DELAY_MS + windUp
+      r.hrWindow = []
+    }
+  }
+  if (r.hrEndAtMs != null && r.stepMs >= r.hrEndAtMs + r.extraMs) {
+    return finishStep(r, ctx, false, true)
+  }
+
+  // Pre-ramp: ramp into an on step during the end of the off step before it.
   if (next && next.on && !step.on) {
-    const remaining = remainingMs(r, ctx.actual.speedMph)
+    const remaining = stepRemainingMs(r, ctx.actual.speedMph)
     if (!r.preRamp && remaining <= rampMs(ctx.actual, stepTargets(next))) {
       r.preRamp = true
       result.command = stepTargets(next)
@@ -261,12 +308,20 @@ function beginStep(run: PlanRun, index: number, ctx: { elapsedMs: number; distan
     stepM: 0,
     extraMs: 0,
     baseMetAtMs: null,
+    hrEndAtMs: null,
+    hrWindow: [],
+    hrGraceFromMs: 0,
     applyToGroup: false,
     results: [...run.results, { index, startMs: ctx.elapsedMs, startM: ctx.distanceM, addedMs: 0 }],
   }
 }
 
-function finishStep(run: PlanRun, ctx: { elapsedMs: number; distanceM: number }, skipped: boolean): TickResult {
+function finishStep(
+  run: PlanRun,
+  ctx: { elapsedMs: number; distanceM: number },
+  skipped: boolean,
+  onHr = false,
+): TickResult {
   let r = { ...run }
   const result: TickResult = { run: r, command: null, split: false, completed: false, autoEnd: false }
   if (!r.started) r = beginStep(r, r.index, ctx)
@@ -277,6 +332,7 @@ function finishStep(run: PlanRun, ctx: { elapsedMs: number; distanceM: number },
     endMs: ctx.elapsedMs,
     endM: ctx.distanceM,
     ...(skipped ? { skipped: true } : {}),
+    ...(onHr ? { endedOnHr: true } : {}),
   }
   r.results = results
   if (r.applyToGroup) r.steps = applyToGroup(r.steps, r.index)
@@ -324,7 +380,14 @@ export function skipStep(run: PlanRun, ctx: { elapsedMs: number; distanceM: numb
 /** After a resume: 3-2-1 at walking speed, then the step's targets. */
 export function holdForResume(run: PlanRun, countdownMs = RESUME_COUNTDOWN_MS): PlanRun {
   if (run.phase !== 'running') return run
-  return { ...run, hold: { kind: 'countdown', leftMs: countdownMs }, preRamp: false }
+  // HR fell during the pause: restart the "HR rising" grace and the average.
+  return {
+    ...run,
+    hold: { kind: 'countdown', leftMs: countdownMs },
+    preRamp: false,
+    hrGraceFromMs: run.stepMs,
+    hrWindow: [],
+  }
 }
 
 /**
@@ -427,4 +490,38 @@ export function closeRun(run: PlanRun, ctx: { elapsedMs: number; distanceM: numb
   const last = results[results.length - 1]
   if (last && last.endMs == null) results[results.length - 1] = { ...last, endMs: ctx.elapsedMs, endM: ctx.distanceM }
   return { ...run, results, phase: 'ended', hold: null, preRamp: false }
+}
+
+/** Add a reading to the window and drop what's older than the window; a lost signal clears it. */
+export function trackHr(
+  window: { t: number; dt: number; bpm: number }[],
+  t: number,
+  dt: number,
+  bpm: number | null,
+): { t: number; dt: number; bpm: number }[] {
+  if (bpm == null) return []
+  return [...window, { t, dt, bpm }].filter((s) => s.t > t - HR_AVERAGE_WINDOW_MS)
+}
+
+/**
+ * Time-weighted average over the last 3 s, or null until there are 3 s of
+ * continuous readings.
+ */
+export function rollingHr(window: { t: number; dt: number; bpm: number }[], t: number): number | null {
+  if (!window.length) return null
+  const covered = t - (window[0].t - window[0].dt)
+  if (covered < HR_AVERAGE_WINDOW_MS - 1) return null
+  let sum = 0
+  let weight = 0
+  for (const s of window) {
+    sum += s.bpm * s.dt
+    weight += s.dt
+  }
+  return weight > 0 ? sum / weight : null
+}
+
+/** In the "HR rising" grace period at the start of an HR rep. */
+export function inHrGrace(run: PlanRun): boolean {
+  const step = currentStep(run)
+  return !!step?.on && run.started && run.stepMs - (run.hrGraceFromMs ?? 0) < HR_GRACE_MS
 }

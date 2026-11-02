@@ -2,7 +2,7 @@
 
 A custom touchscreen console for a Precor TRM 885 treadmill, replacing the stock P80 workout screen. It runs on an Amazon Fire HD 10 (11th gen) in landscape.
 
-**Status: v0.4, simulator only.** The app runs against a simulated treadmill. The real hardware driver (an ESP32 bridge on the console data cable) comes after the data-cable capture. The full requirements live in the Claude project doc `treadmill-app-requirements.md`; requirement IDs (M3, S4, …) in code comments refer to it.
+**Status: v0.6, simulator treadmill; real Bluetooth heart rate.** The app runs against a simulated treadmill. The real hardware driver (an ESP32 bridge on the console data cable) comes after the data-cable capture. The full requirements live in the Claude project doc `treadmill-app-requirements.md`; requirement IDs (M3, S4, …) in code comments refer to it.
 
 > **Safety:** the on-screen Stop button is a convenience. The real stops are the lanyard and physical buttons wired to the controller (requirements S1, S5), and hard speed/incline limits live in the controller firmware (S3). Nothing in this app is a safety boundary.
 
@@ -65,7 +65,13 @@ Three views, switched with the tabs in the status bar: Control Center, Charts an
 - **Pause** freezes the step clock. **Resume** starts the belt at walking speed, counts down 3-2-1, then goes to the step's settings; a rep's clock restarts once the belt is back up to speed.
 - **End:** after the last step the belt holds its speed and "Workout complete" shows **End** (fills over 5 s, then ends the workout) and **Keep running** (back to a free run, starting a new lap).
 - The **summary** adds a target-vs-actual table per step (time, distance, pace, average HR; skipped steps and added recovery marked). The plan, as run, is saved with the workout. A reload mid-workout restores it paused at the same step.
-- HR, zone and effort steps run at their starting pace for now; coaching, HR auto-advance and step-change beeps come in phase 3.
+- **Heart-rate coaching** on HR and zone steps (they run at their starting pace; the app doesn't change speed for you):
+  - In a rep, the heart rate turns orange **Too Low** below the range, green when in it, and red **Too High** above it. For the first 30 s of a rep (and 30 s after a resume) a low heart rate reads **HR rising** in white instead of Too Low, since HR lags the speed change; Too High still shows straight away. In a rest or recovery with an HR target, anything at or below the range is good (green, "Recovering").
+  - It shows on the HR tile on Charts ("Too High · Z2"), the Heart Rate field on Control Center ("Too High · Zone 2 · 136–150"), and as a chip in the banner. Zone targets show their zone number.
+  - Effort (RPE) steps show their target and nothing more.
+- **HR auto-advance:** a rest or recovery set to "start the next rep at this heart rate" ends 5 s after the rolling 3-second average HR falls to the target (so a one-second blip doesn't count, and a dropout restarts the average), plus the wind-up so the rep starts at speed. The banner reads "3:15 max · next at ≤ 130 bpm" until then. Its duration is the maximum, so if the strap drops it simply runs to full time; the banner says "No heart rate: full rest". +15s / +30s still add rest. The summary marks these steps "(HR advance)".
+- **Lost strap** on any HR step: the belt keeps its speed and the banner shows "No heart rate".
+- **Step changes:** a full-width flash with the new step's name and target, a beep each second for the last 3 seconds of a step, and a higher beep when the next one starts. **Workout sounds** in Settings turns the beeps off.
 
 **Both**
 - **Preset laps wait for the ramp.** When a preset tap splits a lap, the speed/incline change goes out immediately but the lap waits. An overlay shows the estimated speed and incline climbing to the new targets, then counts down 3-2-1 and starts the lap.
@@ -96,6 +102,27 @@ Vite prints two URLs:
 - **Local** (`http://localhost:5173/`): open on the Mac. Use Chrome's device toolbar (⌥⌘I, then the phone/tablet icon) and set a 1280 × 800 viewport to approximate the Fire tablet.
 - **Network** (`http://192.168.x.x:5173/`): open this in the Fire tablet's Silk browser while it's on the same Wi-Fi. Edits on the Mac reload on the tablet instantly.
 
+## Install on the Fire tablet (APK)
+
+Every push to `main` builds the Android app on GitHub Actions and replaces the APK on the [Latest APK](https://github.com/kwmck96/Homebrew-Treadmill-Console/releases/tag/apk-latest) release. Pull requests build it too (download it from the run's *Artifacts*) without publishing.
+
+First install:
+1. On the tablet, open Silk and go to the Latest APK release page. Tap **treadmill-console.apk** to download it.
+2. Open the download. Fire OS asks to allow installing unknown apps from Silk: allow it (Settings › Security & Privacy › Apps from Unknown Sources › Silk), go back, tap **Install**.
+3. Open **Treadmill Console**. It runs full screen, locked to landscape, and keeps the screen on during workouts.
+
+Updates: download the APK again and install; it replaces the old version and keeps your data. Don't uninstall first, because uninstalling deletes the app's saved workouts and library.
+
+Signing: builds are signed with the committed `android/app/sideload.keystore` (standard Android debug passwords) so every build can update the last one. To use a private key instead, add `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD` as repository secrets; switching keys needs one uninstall.
+
+The APK keeps its own data, separate from Silk/Vercel: workouts saved in the browser version don't appear in the app.
+
+**Heart-rate sensor:** Settings › Heart rate › Bluetooth › **Pair a sensor**, and pick it from the list. It reconnects by itself every time the app opens and whenever the link drops.
+- Polar Verity Sense: press the button until the heart light is on (heart-rate mode).
+- COROS watch: hold BACK › Toolbox › **Broadcast HR**. Disconnect the watch from your phone first; it allows one Bluetooth connection while broadcasting.
+- Fire OS 7 (Android 9) only finds Bluetooth sensors with **Location** switched on; the app asks for location permission and offers a shortcut to the setting. It never uses your location.
+- On a computer, desktop Chrome can pair a sensor too (Web Bluetooth), but has to be shown the sensor again after each reload.
+
 ## Deploy to Vercel (for testing on the tablet anywhere)
 
 1. In Vercel, **Add New → Project**, import `kwmck96/Homebrew-Treadmill-Console`.
@@ -123,13 +150,16 @@ src/
                store.ts: wires driver + engine + storage together; owns the timer loop
                persistence.ts: IndexedDB storage; fields.ts: the data-field definitions
   settings/    User settings (presets, units, fields), saved in localStorage
-  lib/units.ts Unit conversion and formatting
-  heartrate/   HeartRateSource interface and the simulated strap (model.ts is the physiology)
+  lib/units.ts Unit conversion and formatting; lib/beeper.ts the workout beeps (Web Audio)
+  heartrate/   HeartRateSource interface; the simulated strap (model.ts is the physiology), the
+               Bluetooth sensor (bluetooth.ts, standard Heart Rate Service) and hub.ts, which switches them
+android/       The Capacitor Android project (APK). Built by .github/workflows/android.yml
   charts/      Chart math: visible time window, panning, y-scales, thinning long workouts,
                and inspect.ts (look-back gestures and point-in-time readings)
   plan/        Structured workouts: types, element defaults, expand (blocks → steps), estimates,
                the builder draft store and the IndexedDB library
-               (workout/runner.ts steps through a plan while it runs: pure, like engine.ts)
+               (workout/runner.ts steps through a plan while it runs and workout/hrCoach.ts
+               decides Too Low / Too High: both pure, like engine.ts)
   ui/          React components; ui/charts/ the Charts view, ui/builder/ the Workout Builder,
                ui/workout/ the workout-mode banner, controls and step sheet
 ```
@@ -164,4 +194,4 @@ Internal units: speed in mph and incline in % (the treadmill's native control un
 
 ## Not built yet
 
-Workout builder phase 3 (HR/zone/effort coaching, HR auto-advance, step-change flash and beeps), diagnostics screen (D1/D2), workout history list, a real Bluetooth heart-rate strap (H1; simulated for now), calibration factor (H2), music controls (H3), Capacitor APK packaging, and the real treadmill driver.
+Diagnostics screen (D1/D2), workout history list, calibration factor (H2), music controls (H3), and the real treadmill driver.

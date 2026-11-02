@@ -60,7 +60,7 @@ export function SimPanel({ onClose }: { onClose: () => void }) {
             Reconnect
           </button>
         )}
-        {heartRate.connection === 'connected' ? (
+        {hrSource.mode !== 'simulated' ? null : heartRate.connection === 'connected' ? (
           <button
             type="button"
             className={styles.action}

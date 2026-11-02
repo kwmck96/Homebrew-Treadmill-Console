@@ -99,3 +99,14 @@
   align-items: flex-end;
   gap: 0.6em;
 }
+
+.hrActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5em;
+}
+
+.hrDetail {
+  color: var(--speed);
+}

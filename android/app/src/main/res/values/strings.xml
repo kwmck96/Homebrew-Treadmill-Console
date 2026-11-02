@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Treadmill Console</string>
+    <string name="title_activity_main">Treadmill Console</string>
+    <string name="package_name">dev.kwmck96.treadmillconsole</string>
+    <string name="custom_url_scheme">dev.kwmck96.treadmillconsole</string>
+</resources>

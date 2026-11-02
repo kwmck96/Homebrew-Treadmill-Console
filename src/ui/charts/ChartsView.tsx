@@ -11,6 +11,8 @@ import { hrColor } from '../../lib/hrColor'
 import { useSettings } from '../../settings/store'
 import { quantize } from '../../treadmill/limits'
 import { activeRun, useConsole } from '../../workout/store'
+import { useHrCoaching } from '../workout/useHrCoaching'
+import { coachingBadge } from '../../workout/fields'
 import { WorkoutBanner } from '../workout/WorkoutBanner'
 import { AddRecoveryButton, ApplyPrompt, SkipStepButton, WorkoutCompleteCard } from '../workout/WorkoutMode'
 import { ControlBar } from '../ControlBar'
@@ -46,6 +48,7 @@ export function ChartsView() {
     useSettings.getState().setPresetValue('speed', id, useConsole.getState().dialMph)
   const showPace = useSettings((s) => s.speedDisplay) === 'pace'
   const workoutMode = useConsole((s) => activeRun(s.workout) !== null)
+  const coaching = useHrCoaching()
 
   const canDrive =
     workout?.status === 'running' &&
@@ -93,7 +96,9 @@ export function ChartsView() {
           label="Heart rate"
           value={heartRateBpm == null ? '--' : String(heartRateBpm)}
           unit="bpm"
-          color={hrColor(heartRateBpm)}
+          color={coaching ? coaching.color : hrColor(heartRateBpm)}
+          note={coaching ? coachingBadge(coaching, true) : undefined}
+          noteColor={coaching?.color}
         />
       </div>
 
@@ -174,6 +179,8 @@ function Metric(props: {
   accent?: 'speed' | 'grade'
   /** Value colour (heart rate). */
   color?: string
+  /** Note shown as a filled tag in this colour (HR coaching). */
+  noteColor?: string
 }) {
   const style = props.accent ? ({ '--accent': `var(--${props.accent})` } as CSSProperties) : undefined
   return (
@@ -186,7 +193,12 @@ function Metric(props: {
         {props.unit && <span className={styles.metricUnit}>{props.unit}</span>}
       </span>
       {props.note && (
-        <span className={`${styles.metricNote} num`} data-highlight={props.highlightNote ?? false}>
+        <span
+          className={`${styles.metricNote} num`}
+          data-highlight={props.highlightNote ?? false}
+          data-coach={props.noteColor != null}
+          style={props.noteColor ? { background: props.noteColor } : undefined}
+        >
           {props.note}
         </span>
       )}

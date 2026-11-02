@@ -29,7 +29,14 @@ export function FieldGrid({ ctx, compact = false }: { ctx: FieldContext; compact
               onClick={() => setPicking(slot)}
               aria-label={`${def.label}: ${v.value} ${v.unit ?? ''}. Tap to change field.`}
             >
-              <span className={styles.label}>{def.label}</span>
+              <span className={styles.labelRow}>
+                <span className={styles.label}>{def.label}</span>
+                {v.badge && (
+                  <span className={styles.badge} style={{ background: v.badge.color }}>
+                    {v.badge.text}
+                  </span>
+                )}
+              </span>
               <span className={styles.valueRow}>
                 <span className={`${styles.value} num`} style={v.color ? { color: v.color } : undefined}>
                   {v.value}
