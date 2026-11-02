@@ -8,7 +8,8 @@ import {
   paceUnitLabel,
 } from '../lib/units'
 import { useSettings } from '../settings/store'
-import { lapTotals } from '../workout/engine'
+import { averageHr, lapTotals } from '../workout/engine'
+import { describeStepTarget } from './workout/runText'
 import type { WorkoutRecord } from '../workout/types'
 import styles from './SummaryScreen.module.css'
 
@@ -58,7 +59,45 @@ export function SummaryScreen({ record, onDone }: { record: WorkoutRecord; onDon
       </div>
 
       <div className={styles.tableWrap}>
+        {[...(record.pastRuns ?? []), ...(record.run ? [record.run] : [])].map((run, k) => (
+          <table key={k} className={styles.table}>
+            <caption className={styles.caption}>{run.name}: target vs. actual</caption>
+            <thead>
+              <tr>
+                <th>Step</th>
+                <th>Target</th>
+                <th>Time</th>
+                <th>Distance ({distUnit})</th>
+                <th>Pace ({paceUnitLabel(unit)})</th>
+                <th>Avg HR</th>
+              </tr>
+            </thead>
+            <tbody>
+              {run.results.map((r) => {
+                const step = run.steps[r.index]
+                const ms = (r.endMs ?? record.elapsedMs) - r.startMs
+                const m = (r.endM ?? record.distanceM) - r.startM
+                const hr = averageHr(record, r.startMs, r.endMs ?? record.elapsedMs)
+                return (
+                  <tr key={r.index} className="num" data-skipped={r.skipped ?? false}>
+                    <td>
+                      {step?.label}
+                      {r.skipped && ' (skipped)'}
+                      {r.addedMs > 0 && ` (+${Math.round(r.addedMs / 1000)}s)`}
+                    </td>
+                    <td>{step ? describeStepTarget(step, unit) : ''}</td>
+                    <td>{formatDuration(ms)}</td>
+                    <td>{formatDistance(m, unit)}</td>
+                    <td>{m > 1 ? formatPace(averageMph(m, ms), unit) : '–'}</td>
+                    <td>{hr == null ? '–' : Math.round(hr)}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        ))}
         <table className={styles.table}>
+          <caption className={styles.caption}>Laps</caption>
           <thead>
             <tr>
               <th>Lap</th>

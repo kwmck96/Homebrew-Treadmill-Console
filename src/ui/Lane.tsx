@@ -42,6 +42,12 @@ interface LaneProps {
   onStep: (delta: number) => void
   /** Controls only work while a workout is running and the belt is moving. */
   enabled: boolean
+  /** Workout mode: replaces the presets (and their Lap on tap / Edit). */
+  presetsSlot?: ReactNode
+  /** Workout mode: the steps own the laps. */
+  hideLapToggle?: boolean
+  /** Floats over the readout (e.g. "Apply to all intervals?"). */
+  overlay?: ReactNode
 }
 
 export function Lane(props: LaneProps) {
@@ -54,30 +60,34 @@ export function Lane(props: LaneProps) {
     <section className={styles.lane} style={accentStyle} aria-label={props.title}>
       <header className={styles.header}>
         <h2 className={styles.title}>{props.title}</h2>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={props.lapOnTap}
-          aria-label={`Lap when tapping a ${props.title.toLowerCase()} preset`}
-          className={styles.lapToggle}
-          onClick={props.onToggleLapOnTap}
-        >
-          Lap on tap
-          <span className={styles.switch} aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          className={styles.editToggle}
-          aria-pressed={props.editing}
-          aria-label={props.editing ? 'Done editing presets' : `Edit ${props.title.toLowerCase()} presets`}
-          onClick={props.onToggleEditing}
-        >
-          {props.editing ? 'Done' : 'Edit'}
-        </button>
+        {!props.hideLapToggle && !props.presetsSlot && (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={props.lapOnTap}
+            aria-label={`Lap when tapping a ${props.title.toLowerCase()} preset`}
+            className={styles.lapToggle}
+            onClick={props.onToggleLapOnTap}
+          >
+            Lap on tap
+            <span className={styles.switch} aria-hidden="true" />
+          </button>
+        )}
+        {!props.presetsSlot && (
+          <button
+            type="button"
+            className={styles.editToggle}
+            aria-pressed={props.editing}
+            aria-label={props.editing ? 'Done editing presets' : `Edit ${props.title.toLowerCase()} presets`}
+            onClick={props.onToggleEditing}
+          >
+            {props.editing ? 'Done' : 'Edit'}
+          </button>
+        )}
       </header>
 
       <div className={styles.presets}>
-        {props.presets.map((p) => {
+        {props.presetsSlot ?? props.presets.map((p) => {
           const f = props.formatPreset(p.value)
           if (props.editing) {
             return (
@@ -124,6 +134,8 @@ export function Lane(props: LaneProps) {
           )
         })}
       </div>
+
+      {props.overlay && <div className={styles.overlay}>{props.overlay}</div>}
 
       <div className={styles.readoutBlock}>
         <div className={styles.readoutRow}>

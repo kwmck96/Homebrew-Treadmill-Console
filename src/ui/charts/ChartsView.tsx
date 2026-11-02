@@ -10,7 +10,9 @@ import {
 import { hrColor } from '../../lib/hrColor'
 import { useSettings } from '../../settings/store'
 import { quantize } from '../../treadmill/limits'
-import { useConsole } from '../../workout/store'
+import { activeRun, useConsole } from '../../workout/store'
+import { WorkoutBanner } from '../workout/WorkoutBanner'
+import { AddRecoveryButton, ApplyPrompt, SkipStepButton, WorkoutCompleteCard } from '../workout/WorkoutMode'
 import { ControlBar } from '../ControlBar'
 import { HoldButton } from '../HoldButton'
 import { PauseBanner } from '../PauseBanner'
@@ -43,6 +45,7 @@ export function ChartsView() {
   const saveWheelTo = (id: string) =>
     useSettings.getState().setPresetValue('speed', id, useConsole.getState().dialMph)
   const showPace = useSettings((s) => s.speedDisplay) === 'pace'
+  const workoutMode = useConsole((s) => activeRun(s.workout) !== null)
 
   const canDrive =
     workout?.status === 'running' &&
@@ -97,36 +100,52 @@ export function ChartsView() {
       <div className={styles.middle}>
         <SplitsColumn record={workout} unit={unit} />
         <div className={styles.chartColumn}>
+          <WorkoutBanner />
           <PauseBanner />
           <ActivityChart />
           <PendingLapOverlay />
+          <WorkoutCompleteCard />
         </div>
       </div>
 
-      <div className={styles.controls}>
-        <div className={styles.speedControls} role="group" aria-label="Speed">
-          {recover && (
-            <PresetHoldButton
-              label="Recover"
-              valueMph={recover.value}
-              unit={unit}
-              canTap={canDrive}
-              onTap={() =>
-                jumpToPreset('speed', 'recovery', useSettings.getState().lapOnPresetTap)
-              }
-              onHold={() => saveWheelTo('recovery')}
-            />
-          )}
-          <SpeedWheel />
-          {run && (
-            <PresetHoldButton
-              label="Run"
-              valueMph={run.value}
-              unit={unit}
-              canTap={canDrive}
-              onTap={() => jumpToPreset('speed', 'run', useSettings.getState().lapOnPresetTap)}
-              onHold={() => saveWheelTo('run')}
-            />
+      <div className={styles.controls} data-workout={workoutMode}>
+        <div className={styles.speedControls} role="group" aria-label="Speed" data-workout={workoutMode}>
+          {workoutMode ? (
+            <>
+              <ApplyPrompt className={styles.prompt} />
+              <AddRecoveryButton seconds={15} className={styles.recoverySlot} />
+              <SkipStepButton className={styles.skipSlot} />
+              <div className={styles.wheelSlot}>
+                <SpeedWheel />
+              </div>
+              <AddRecoveryButton seconds={30} className={styles.runSlot} />
+            </>
+          ) : (
+            <>
+              {recover && (
+                <PresetHoldButton
+                  label="Recover"
+                  valueMph={recover.value}
+                  unit={unit}
+                  canTap={canDrive}
+                  onTap={() =>
+                    jumpToPreset('speed', 'recovery', useSettings.getState().lapOnPresetTap)
+                  }
+                  onHold={() => saveWheelTo('recovery')}
+                />
+              )}
+              <SpeedWheel />
+              {run && (
+                <PresetHoldButton
+                  label="Run"
+                  valueMph={run.value}
+                  unit={unit}
+                  canTap={canDrive}
+                  onTap={() => jumpToPreset('speed', 'run', useSettings.getState().lapOnPresetTap)}
+                  onHold={() => saveWheelTo('run')}
+                />
+              )}
+            </>
           )}
         </div>
         <div className={styles.center}>

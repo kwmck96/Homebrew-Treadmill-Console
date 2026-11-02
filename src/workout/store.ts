@@ -13,6 +13,10 @@ import type { TreadmillDriver, TreadmillLimits, TreadmillState } from '../treadm
 import * as engine from './engine'
 import { advancePendingLap, type PendingLap, startPendingLap } from './pendingLap'
 import { archiveWorkout, clearActiveWorkout, loadActiveWorkout, saveActiveWorkout } from './persistence'
+import { expandPlan } from '../plan/expand'
+import type { WorkoutPlan } from '../plan/types'
+import * as runner from './runner'
+import type { PlanRun, StepEdit } from './runner'
 import type { PauseReason, WorkoutRecord } from './types'
 
 /** How often the workout clock and distance are updated. */
@@ -27,6 +31,24 @@ const MAX_SUBSTEP_MS = 1000
 
 /** Simulator-only: how many times faster than real time the simulation runs. */
 export type SimTimeScale = 1 | 10 | 30
+
+/** The big countdown after confirming Start workout. */
+export const START_COUNTDOWN_MS = 5000
+/** "Apply to all intervals in this step?": shown once changes settle this long... */
+export const APPLY_SETTLE_MS = 1000
+/** ...then No fills over this long and is chosen automatically. */
+export const APPLY_FILL_MS = 3000
+const APPLY_FLASH_MS = 1400
+
+/**
+ * "Apply to all intervals in this step?" after a manual speed or incline
+ * change in a rep. waiting: changes still settling. asking: on screen, No
+ * filling. flash: answered, confirming which way.
+ */
+export type ApplyPrompt =
+  | { stage: 'waiting'; stepIndex: number; changedAt: number }
+  | { stage: 'asking'; stepIndex: number; askingSince: number }
+  | { stage: 'flash'; stepIndex: number; answer: 'yes' | 'no'; until: number }
 
 interface ConsoleState {
   ready: boolean
@@ -47,6 +69,9 @@ interface ConsoleState {
   pendingLap: PendingLap | null
   /** The finished workout whose summary is on screen (M8). */
   summary: WorkoutRecord | null
+  /** Start workout confirmed: wall-clock ms left before it begins. */
+  startCountdown: { leftMs: number; name: string } | null
+  applyPrompt: ApplyPrompt | null
 }
 
 interface ConsoleActions {
@@ -71,6 +96,16 @@ interface ConsoleActions {
   jumpToPreset: (kind: 'speed' | 'incline', presetId: string, lap: boolean) => void
   /** "Do not start new lap": drop the pending lap, keep the new speed/incline. */
   cancelPendingLap: () => void
+  /** Start workout (after its confirm): 5 s countdown, then run the plan. */
+  beginPlan: (plan: WorkoutPlan) => void
+  cancelStartCountdown: () => void
+  /** +15 s / +30 s Recovery. */
+  addRecoveryTime: (ms: number) => void
+  skipStep: () => void
+  editRunStep: (index: number, edit: StepEdit) => void
+  answerApplyPrompt: (yes: boolean) => void
+  /** After the last step: carry on as a free run. */
+  keepRunning: () => void
 }
 
 // ---- driver selection ----------------------------------------------------
@@ -105,6 +140,14 @@ let awaitingSince = 0
 /** If the belt hasn't started this long after Start/Resume, pause the workout. */
 const BELT_START_TIMEOUT_MS = 5000
 
+/** The run waiting for the start countdown to finish. */
+let queuedRun: PlanRun | null = null
+
+/** A running structured workout, if any (not complete or ended). */
+export function activeRun(w: WorkoutRecord | null): PlanRun | null {
+  return w?.run && w.run.phase !== 'ended' ? w.run : null
+}
+
 function beginAwaitingBelt() {
   awaitingBeltStart = true
   awaitingSince = performance.now()
@@ -125,6 +168,7 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
     if (!workout) return
     // Any stop cancels a pending preset lap; the next lap starts on resume.
     if (get().pendingLap) set({ pendingLap: null })
+    if (get().applyPrompt) set({ applyPrompt: null })
     const next = engine.pause(workout, reason, now())
     if (next !== workout) commit(next)
   }
@@ -165,6 +209,9 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
       }
     }
 
+    tickStartCountdown(realDt)
+    tickApplyPrompt(t)
+
     const { workout } = get()
     if (!workout || workout.status === 'finished') {
       feedHr(dt)
@@ -183,7 +230,12 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
     }
 
     let next = workout
-    const lapM = autoLapMeters(useSettings.getState())
+    const run0 = activeRun(workout)
+    // A workout can turn auto-lap off; its steps split laps either way.
+    const lapM = run0?.disableAutoLap ? null : autoLapMeters(useSettings.getState())
+    const beltRunning =
+      treadmill.belt === 'running' && treadmill.connection === 'connected' && !treadmill.safetyStop
+    let autoEnd = false
     for (let left = dt; left > 0; left -= MAX_SUBSTEP_MS) {
       const step = Math.min(left, MAX_SUBSTEP_MS)
       feedHr(step)
@@ -192,12 +244,35 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
         actualInclinePct: treadmill.actualInclinePct,
         connected: treadmill.connection === 'connected',
         heartRateBpm: get().heartRate.bpm,
+        creditDistance: !runner.isOffTreadmill(next.run),
       }
       const before = next
       next = engine.advance(next, reading, step, now())
       if (lapM != null) next = engine.autoLap(before, next, lapM, now())
+
+      const run = activeRun(next)
+      if (run) {
+        const res = runner.tickRun(run, {
+          dtMs: step,
+          realDtMs: (realDt * step) / dt,
+          distM: next.distanceM - before.distanceM,
+          actual: { speedMph: treadmill.actualSpeedMph, inclinePct: treadmill.actualInclinePct },
+          beltRunning: beltRunning && next.status === 'running' && !awaitingBeltStart,
+          elapsedMs: next.elapsedMs,
+          distanceM: next.distanceM,
+        })
+        next = res.run === run ? next : { ...next, run: res.run }
+        if (res.command) sendTargets(res.command)
+        if (res.split) next = splitForStep(next)
+        if (res.split || res.completed) set({ applyPrompt: null })
+        if (res.autoEnd) autoEnd = true
+      }
     }
     set({ workout: next })
+    if (autoEnd) {
+      void get().endWorkout()
+      return
+    }
 
     // Pending preset lap: follow the estimated ramp, then the countdown.
     const pending = get().pendingLap
@@ -230,6 +305,112 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
     }
   }
 
+  /** Runner commands go straight to the driver: they aren't manual changes. */
+  function sendTargets(t: runner.Targets) {
+    const limits = effectiveLimits()
+    const speed = clampSpeed(t.speedMph, limits)
+    const incline = clampIncline(t.inclinePct, limits)
+    const tm = get().treadmill
+    if (Math.abs(tm.targetSpeedMph - speed) > 0.001) void driver.setSpeed(speed)
+    if (Math.abs(tm.targetInclinePct - incline) > 0.001) void driver.setIncline(incline)
+  }
+
+  /** A step started: new lap, unless the current lap has only just begun. */
+  function splitForStep(w: WorkoutRecord): WorkoutRecord {
+    const lap = engine.currentLap(w)
+    const t = engine.lapTotals(w, lap)
+    if (t.elapsedMs < 1000 && t.distanceM < 1) return w
+    return engine.addLap(w, now(), 'step')
+  }
+
+  function tickStartCountdown(realDt: number) {
+    const sc = get().startCountdown
+    if (!sc) return
+    const { treadmill } = get()
+    if (treadmill.connection !== 'connected' || treadmill.safetyStop) {
+      queuedRun = null
+      set({ startCountdown: null })
+      return
+    }
+    const leftMs = Math.max(0, sc.leftMs - realDt)
+    if (leftMs > 0) {
+      set({ startCountdown: { ...sc, leftMs } })
+      return
+    }
+    // A paused workout continues once the belt has fully stopped (S4).
+    const { workout } = get()
+    if (workout?.status === 'paused' && treadmill.belt !== 'stopped') {
+      set({ startCountdown: { ...sc, leftMs: 0 } })
+      return
+    }
+    set({ startCountdown: null })
+    void launchQueuedRun()
+  }
+
+  async function launchQueuedRun() {
+    const run = queuedRun
+    queuedRun = null
+    if (!run) return
+    const { workout } = get()
+    const startSpeed = useSettings.getState().startSpeedMph
+    if (!workout) {
+      beginAwaitingBelt()
+      commit({ ...engine.createWorkout(now()), run })
+      await driver.start(startSpeed)
+      return
+    }
+    // Same activity: keep any earlier structured workout's results.
+    const pastRuns = workout.run ? [...(workout.pastRuns ?? []), workout.run] : workout.pastRuns
+    if (workout.status === 'paused') {
+      beginAwaitingBelt()
+      commit({ ...engine.resume(workout, now()), run, pastRuns })
+      await driver.start(startSpeed)
+    } else {
+      commit({ ...workout, run, pastRuns })
+    }
+  }
+
+  function tickApplyPrompt(t: number) {
+    const p = get().applyPrompt
+    if (!p) return
+    const run = activeRun(get().workout)
+    if (p.stage !== 'flash' && (!run || run.index !== p.stepIndex)) {
+      set({ applyPrompt: null })
+      return
+    }
+    if (p.stage === 'waiting' && t - p.changedAt >= APPLY_SETTLE_MS) {
+      set({ applyPrompt: { stage: 'asking', stepIndex: p.stepIndex, askingSince: t } })
+    } else if (p.stage === 'asking' && t - p.askingSince >= APPLY_FILL_MS) {
+      get().answerApplyPrompt(false)
+    } else if (p.stage === 'flash' && t >= p.until) {
+      set({ applyPrompt: null })
+    }
+  }
+
+  /**
+   * The user changed speed or incline: remember it on the step, and offer
+   * "Apply to all intervals in this step?" when there are reps left.
+   */
+  function noteManual(kind: 'speed' | 'incline', value: number) {
+    const { workout, treadmill } = get()
+    const run = activeRun(workout)
+    if (!workout || !run || run.phase !== 'running' || run.hold?.kind === 'countdown') return
+    const m = runner.noteManualTargets(run, {
+      speedMph: kind === 'speed' ? value : treadmill.targetSpeedMph,
+      inclinePct: kind === 'incline' ? value : treadmill.targetInclinePct,
+    })
+    commit({ ...workout, run: m.run })
+    if (m.index !== run.index || !runner.canApplyToGroup(m.run)) return
+    const t = performance.now()
+    const p = get().applyPrompt
+    if (p?.stage === 'asking') {
+      // Further changes while asking restart the No fill.
+      set({ applyPrompt: { ...p, askingSince: t } })
+    } else {
+      set({ applyPrompt: { stage: 'waiting', stepIndex: run.index, changedAt: t } })
+    }
+  }
+
   function canDrive(): boolean {
     const { workout, treadmill } = get()
     return (
@@ -250,6 +431,8 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
       useSettings.getState().startSpeedMph,
     summary: null,
     pendingLap: null,
+    startCountdown: null,
+    applyPrompt: null,
 
     async init() {
       if (get().ready) return
@@ -291,7 +474,10 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
       // at walking speed rather than catching a decelerating belt.
       if (treadmill.belt !== 'stopped') return
       beginAwaitingBelt()
-      commit(engine.resume(workout, now()))
+      const resumed = engine.resume(workout, now())
+      const run = activeRun(resumed)
+      // A structured workout: 3-2-1 at walking speed, then the step's targets.
+      commit(run ? { ...resumed, run: runner.holdForResume(run) } : resumed)
       await driver.start(useSettings.getState().startSpeedMph)
     },
 
@@ -304,14 +490,15 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
       const { workout } = get()
       if (!workout) return
       await driver.stop()
-      const finished = engine.finish(workout, now())
-      set({ workout: null, summary: finished, pendingLap: null })
+      const closed = workout.run ? { ...workout, run: runner.closeRun(workout.run, workout) } : workout
+      const finished = engine.finish(closed, now())
+      set({ workout: null, summary: finished, pendingLap: null, applyPrompt: null })
       await archiveWorkout(finished)
     },
 
     async discardWorkout() {
       await driver.stop()
-      set({ workout: null, pendingLap: null })
+      set({ workout: null, pendingLap: null, applyPrompt: null })
       await clearActiveWorkout()
     },
 
@@ -329,7 +516,9 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
 
     setSpeed(mph) {
       if (!canDrive()) return
-      void driver.setSpeed(clampSpeed(mph, effectiveLimits()))
+      const value = clampSpeed(mph, effectiveLimits())
+      void driver.setSpeed(value)
+      noteManual('speed', value)
     },
 
     nudgeSpeed(delta) {
@@ -340,7 +529,9 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
 
     setIncline(pct) {
       if (!canDrive()) return
-      void driver.setIncline(clampIncline(pct, effectiveLimits()))
+      const value = clampIncline(pct, effectiveLimits())
+      void driver.setIncline(value)
+      noteManual('incline', value)
     },
 
     nudgeIncline(delta) {
@@ -350,7 +541,10 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
     setDial(mph) {
       const value = clampSpeed(mph, effectiveLimits())
       set({ dialMph: value })
-      if (canDrive()) void driver.setSpeed(value)
+      if (canDrive()) {
+        void driver.setSpeed(value)
+        noteManual('speed', value)
+      }
     },
 
     jumpToPreset(kind, presetId, lap) {
@@ -365,6 +559,8 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
       // The lap waits for the ramp (pendingLap.ts). A tap while one is already
       // pending re-targets it, even if this preset's lap-on-tap is off.
       const { treadmill: t, pendingLap } = get()
+      // In a structured workout the steps own the laps.
+      if (activeRun(get().workout)) lap = false
       if (lap || pendingLap) {
         set({
           pendingLap: startPendingLap(
@@ -384,6 +580,72 @@ export const useConsole = create<ConsoleState & ConsoleActions>()((set, get) => 
 
     cancelPendingLap() {
       set({ pendingLap: null })
+    },
+
+    beginPlan(plan) {
+      const { treadmill, workout } = get()
+      if (treadmill.connection !== 'connected' || treadmill.safetyStop) return
+      if (activeRun(workout) || get().startCountdown || plan.blocks.length === 0) return
+      const { maxHr, restHr } = useSettings.getState()
+      queuedRun = runner.createRun(plan.name, expandPlan(plan, { maxHr, restHr }), plan.disableAutoLap ?? false)
+      set({ startCountdown: { leftMs: START_COUNTDOWN_MS, name: plan.name }, pendingLap: null })
+      useSettings.getState().update({ view: 'charts' })
+    },
+
+    cancelStartCountdown() {
+      queuedRun = null
+      set({ startCountdown: null })
+    },
+
+    addRecoveryTime(ms) {
+      const { workout } = get()
+      const run = activeRun(workout)
+      if (!workout || !run || !runner.canAddTime(run)) return
+      commit({ ...workout, run: runner.addTime(run, ms) })
+    },
+
+    skipStep() {
+      const { workout } = get()
+      const run = activeRun(workout)
+      if (!workout || !run || run.phase !== 'running') return
+      const res = runner.skipStep(run, workout)
+      let next: WorkoutRecord = { ...workout, run: res.run }
+      if (workout.status === 'running' && res.command) sendTargets(res.command)
+      if (res.split) next = splitForStep(next)
+      set({ applyPrompt: null })
+      commit(next)
+    },
+
+    editRunStep(index, edit) {
+      const { workout } = get()
+      const run = activeRun(workout)
+      if (!workout || !run) return
+      const res = runner.editStep(run, index, edit)
+      if (res.command && canDrive()) sendTargets(res.command)
+      commit({ ...workout, run: res.run })
+    },
+
+    answerApplyPrompt(yes) {
+      const p = get().applyPrompt
+      if (!p || p.stage === 'flash') return
+      const { workout } = get()
+      const run = activeRun(workout)
+      if (yes && workout && run) commit({ ...workout, run: { ...run, applyToGroup: true } })
+      set({
+        applyPrompt: {
+          stage: 'flash',
+          stepIndex: p.stepIndex,
+          answer: yes ? 'yes' : 'no',
+          until: performance.now() + APPLY_FLASH_MS,
+        },
+      })
+    },
+
+    keepRunning() {
+      const { workout } = get()
+      if (!workout?.run || workout.run.phase !== 'complete') return
+      const next = { ...workout, run: runner.keepRunning(workout.run) }
+      commit(engine.addLap(next, now(), 'manual'))
     },
 
     setSimTimeScale(scale) {

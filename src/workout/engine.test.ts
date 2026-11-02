@@ -160,3 +160,12 @@ describe('auto-lap', () => {
     expect(currentLap(same).startDistanceM).toBeCloseTo(w.distanceM, 6)
   })
 })
+
+describe('off-treadmill rest', () => {
+  it('runs the clock but adds no distance', () => {
+    const w = advance(createWorkout(0), { actualSpeedMph: 8, actualInclinePct: 2, connected: true, creditDistance: false }, 1000, 0)
+    expect(w.elapsedMs).toBe(1000)
+    expect(w.distanceM).toBe(0)
+    expect(w.elevGainM).toBe(0)
+  })
+})

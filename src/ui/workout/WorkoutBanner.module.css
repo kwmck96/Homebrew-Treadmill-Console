@@ -1,0 +1,130 @@
+.banner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+  min-height: 3.2em;
+  padding: 0.5em 1em 0.65em;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--lane-raised);
+  border: 2px solid var(--line);
+  border-left: 0.4em solid var(--speed);
+  text-align: left;
+  white-space: nowrap;
+}
+
+/* Recoveries, rests, warmup and cooldown: calmer edge. */
+.banner[data-kind='off'] {
+  border-left-color: var(--grade);
+}
+
+.banner[data-phase='complete'] {
+  border-left-color: var(--go);
+}
+
+.mode {
+  flex: none;
+  padding: 0.1em 0.55em;
+  border-radius: 999px;
+  background: var(--chalk);
+  color: var(--night);
+  font-size: 0.75em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.text {
+  flex: none;
+  font-size: 1.1em;
+}
+
+.next {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--mist);
+  font-size: 1.05em;
+}
+
+/* Control Center's narrower column: two rows, step on top, next + target below. */
+.banner[data-compact='true'] {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'mode text hold'
+    'next next target';
+  row-gap: 0.15em;
+}
+
+.banner[data-compact='true'] .mode {
+  grid-area: mode;
+}
+
+.banner[data-compact='true'] .text {
+  grid-area: text;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.banner[data-compact='true'] .hold {
+  grid-area: hold;
+}
+
+.banner[data-compact='true'] .next {
+  grid-area: next;
+  font-size: 0.9em;
+}
+
+.banner[data-compact='true'] .target {
+  grid-area: target;
+}
+
+.banner[data-compact='true'] .edit {
+  display: none;
+}
+
+.hold {
+  flex: none;
+  padding: 0.1em 0.6em;
+  border-radius: 999px;
+  background: var(--speed);
+  color: var(--speed-ink);
+  font-weight: 650;
+}
+
+.target {
+  flex: none;
+  margin-left: auto;
+  color: var(--speed);
+  font-weight: 650;
+}
+
+.banner[data-kind='off'] .target {
+  color: var(--grade);
+}
+
+.edit {
+  flex: none;
+  color: var(--mist);
+  font-size: 0.85em;
+}
+
+.progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0.25em;
+  background: var(--line);
+}
+
+.progress > span {
+  display: block;
+  height: 100%;
+  background: var(--chalk);
+  transition: width 250ms linear;
+}
